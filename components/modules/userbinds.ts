@@ -146,6 +146,7 @@ export const readUserLua = (): UserLua => {
 }
 
 const THEME_ACTIONS: ThemeAction[] = [
+    { id: "hud.utilitywheel", label: "UTILITY WHEEL (BETA)", group: "deck", mod: "SUPER + CTRL", key: "space" },
     { id: "hud.controls", label: "CONTROLS TRAY", group: "deck", mod: "SUPER + ALT", key: "C" },
     { id: "hud.information", label: "WEATHER / MARKETS TRAY", group: "deck", mod: "SUPER + ALT", key: "W" },
     { id: "hud.system", label: "CPU / RAM TRAY", group: "deck", mod: "SUPER + ALT", key: "S" },

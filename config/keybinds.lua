@@ -226,6 +226,7 @@ for i = 1, 10 do
 end
 
 CD.actions = {
+    { id="hud.utilitywheel", label="UTILITY WHEEL (BETA)", mod="SUPER + CTRL", key="space", group="deck", run=sock("utility-wheel") },
     { id="hud.controls", label="CONTROLS TRAY", mod="SUPER + ALT", key="C", group="deck", run=sock("controls-tray") },
     { id="hud.information", label="WEATHER / MARKETS TRAY", mod="SUPER + ALT", key="W", group="deck", run=sock("information-tray") },
     { id="hud.system", label="CPU / RAM TRAY", mod="SUPER + ALT", key="S", group="deck", run=sock("system-tray") },

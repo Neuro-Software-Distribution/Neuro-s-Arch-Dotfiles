@@ -37,6 +37,7 @@ import { AppsMenuWindow, openAppsMenu } from "./components/modules/appsmenu.ts"
 import { PlayerWindow, togglePlayer } from "./components/modules/player.ts"
 import { NowPlayingWindow } from "./components/modules/nowplaying.ts"
 import { toggleDesignPrototype } from "./components/modules/design-prototype.ts"
+import { UtilityWheelWindow, toggleUtilityWheel } from "./components/modules/utility-wheel.ts"
 
 const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
 const CSS = GLib.getenv("CYBER_CSS") || `${RUNTIME_DIR}/shell.css`
@@ -305,6 +306,8 @@ App.start({
  } catch (e) { print(e); reply("err") }
  } else if (request === "design-prototype") {
  try { toggleDesignPrototype(); reply("ok") } catch (e) { print(e); reply("err") }
+ } else if (request === "utility-wheel") {
+ try { toggleUtilityWheel(); reply("ok") } catch (e) { print(e); reply("err") }
  } else if (request === "launcher") {
  execAsync(["sh", "-c", "rofi -show drun || rofi -show run"]).catch(print)
  reply("ok")
@@ -435,6 +438,7 @@ App.start({
  ThemeSettingsWindow()
  AppsMenuWindow()
  PlayerWindow()
+ UtilityWheelWindow()
  registerHudWindows(hudWins)
  execAsync(["sh", "-c", `'${CYBER_DIR}/scripts/appvol-keeper'`]).catch(() => {})
 
