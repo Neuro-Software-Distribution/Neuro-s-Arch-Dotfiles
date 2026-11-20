@@ -22,7 +22,7 @@ if [ ! -r "$wallpaper" ]; then
     wallpaper="${HOME}/.config/hypr/themes/cyberpunk/assets/img/lucy_wallpaper.png"
 fi
 
-sddm_current="/usr/share/sddm/themes/netwatch/current"
+sddm_current="${CYBER_SDDM_CURRENT_DIR:-/usr/share/sddm/themes/netwatch/current}"
 if [ -d "$sddm_current" ] && [ -w "$sddm_current" ] && [ -r "$wallpaper" ]; then
     wp_ext="$(printf '%s' "${wallpaper##*.}" | tr '[:upper:]' '[:lower:]')"
     case "$wallpaper" in
@@ -63,6 +63,25 @@ find_compositor_socket() {
     return 1
 }
 
+mpvpaper_ready() {
+    local pid="$1" socket="$2"
+    # A live process or an open IPC socket alone is not enough: mpv can stay
+    # alive after decoder/output setup fails. Video parameters appear only once
+    # mpv has accepted a video stream for rendering.
+    command -v socat >/dev/null 2>&1 || return 1
+    for _ in $(seq 1 200); do
+        if [ -S "$socket" ] \
+           && printf '%s\n' '{ "command": ["get_property", "video-params"] }' \
+              | timeout 1 socat - "$socket" 2>/dev/null \
+              | grep -q '"error":"success"'; then
+            return 0
+        fi
+        kill -0 "$pid" 2>/dev/null || return 1
+        sleep 0.05
+    done
+    return 1
+}
+
 compositor_ready=0
 if command -v wlr-randr >/dev/null 2>&1; then
     for _ in $(seq 1 200); do
@@ -96,21 +115,15 @@ case "${wallpaper##*.}" in
             rm -f "$sock"
             mpvpaper -o "no-audio --really-quiet --loop-file=inf --keepaspect=no --hwdec=auto-safe --gpu-shader-cache=no --input-ipc-server=$sock" ALL "$wallpaper" 9>&- >>"${HOME}/.cache/cyberpunk-mpvpaper.log" 2>&1 &
             new_pid=$!
-            if command -v socat >/dev/null 2>&1; then
-                for _ in $(seq 1 200); do
-                    [ -S "$sock" ] && printf '%s\n' '{ "command": ["get_property", "pause"] }' | timeout 1 socat - "$sock" >/dev/null 2>&1 && break
-                    sleep 0.05
-                done
-            else
-                sleep 2
-            fi
-            sleep 0.4
-            if kill -0 "$new_pid" 2>/dev/null; then
+            if mpvpaper_ready "$new_pid" "$sock"; then
                 [ -n "$old_mpvp" ] && kill $old_mpvp 2>/dev/null
                 [ -n "$old_awww" ] && kill $old_awww 2>/dev/null
                 exit 0
             fi
-            printf '%s\n' 'new mpvpaper died before rendering |::| keeping the previous wallpaper' >>"${HOME}/.cache/cyberpunk-mpvpaper.log"
+            kill "$new_pid" 2>/dev/null || true
+            wait "$new_pid" 2>/dev/null || true
+            rm -f "$sock"
+            printf '%s\n' 'new mpvpaper never became render-ready |::| keeping the previous wallpaper' >>"${HOME}/.cache/cyberpunk-mpvpaper.log"
             exit 1
         fi
         printf '%s\n' 'mpvpaper not found |::| falling back to the static wallpaper' >>"${HOME}/.cache/cyberpunk-awww.log"

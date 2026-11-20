@@ -21,4 +21,38 @@ jobs:
       - run: python3 tests/theme-startup-harness.py
       - run: python3 tests/theme-config-harness.py
       - run: python3 tests/terminal-migration-harness.py
+      - run: python3 tests/wallpaper-handoff-harness.py
       - run: node --test tests/*.test.mjs
+
+  native-preflight:
+    name: Native Arch preflight
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the shell against the current Arch desktop stack
+        run: |
+          docker run --rm \
+            --volume "$GITHUB_WORKSPACE:/source:ro" \
+            archlinux:base-devel \
+            bash -euo pipefail -c '
+              pacman -Syu --noconfirm --needed git sudo gjs hyprland python sassc
+              useradd --create-home builder
+              printf "builder ALL=(ALL) NOPASSWD: ALL\\n" > /etc/sudoers.d/builder
+              install -d -o builder -g builder /work
+              cp -a /source/. /work/
+              chown -R builder:builder /work
+              su builder -s /bin/bash -c "
+                git clone https://aur.archlinux.org/yay.git /tmp/yay
+                cd /tmp/yay && makepkg -si --noconfirm
+                yay -S --needed --noconfirm aylurs-gtk-shell libastal-gjs-git libastal-notifd-git libastal-wireplumber-git libastal-mpris-git
+                cd /work
+                mkdir -p node_modules
+                ln -sfn /usr/share/ags/js node_modules/ags
+                ln -sfn /usr/share/astal/gjs node_modules/astal
+                ln -sfn /usr/share/ags/js/node_modules/gnim node_modules/gnim
+                stage=\$(mktemp -d)
+                trap '\''rm -rf \"\$stage\"'\'' EXIT
+                ./scripts/preflight \"\$stage\"
+              "
+            '
