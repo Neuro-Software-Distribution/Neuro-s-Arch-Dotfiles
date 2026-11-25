@@ -5,6 +5,7 @@ import { createUtilTray } from "./util-tray.ts"
 import { NEON, onColorChange, rgbToHex } from "./colors.ts"
 
 const information = createUtilTray({
+    visibilityKey: "trayInformation",
     label: "WEATHER / MARKETS",
     side: "right",
     edge: "right",

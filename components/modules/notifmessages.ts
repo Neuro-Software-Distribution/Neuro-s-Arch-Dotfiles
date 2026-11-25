@@ -6,15 +6,14 @@ import AstalNotifd from "gi://AstalNotifd"
 import Gdk from "gi://Gdk?version=3.0"
 import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
 import { makePlane, fillQuad, strokePath, tiltText } from "./proj.ts"
-import { NEON, USER_A, onColorChange, tintSurface, tintPixbuf, imgTint, isOvr } from "./colors.ts"
+import { polygonRects } from "./input-region.ts"
+import { NEON, USER_A, onColorChange, tintPixbuf, imgTint } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
 
 const Cairo = (imports as any).cairo
 const notifd = AstalNotifd.get_default()
-const LIFETIME = 15000
 
 import { TITLE, MONO, ICONF, NAVINE, NEUE, ROBOTO, ROBOTO_BOLD, ROBOTO_LIGHT, PLAY, RAJDHANI } from "./fonts.ts"
-import { dockNotifDecr } from "./dock.ts"
 import { startTray, onTrayChange, getTrayItems, trayActivate, trayMenu, trayMenuClick, TrayItem, MenuNode } from "./tray.ts"
 const XICON = "\uf00d", ENVELOPE = "\uf0e0"
 const YELLOW: [number, number, number] = NEON.amber
@@ -24,27 +23,29 @@ const GREY: [number, number, number] = NEON.msggrey
 const DIM_RED: [number, number, number] = NEON.dimred
 const GREY_DARK: [number, number, number] = [30, 32, 36]
 const DIM_BG: [number, number, number] = [10, 12, 20]
-const PANEL_BG: [number, number, number] = [22, 30, 45]
 const SND = `${CYBER_DIR}/assets/audio/notif.mp3`
-const ICON_3D = `${CYBER_DIR}/assets/icons/file.png`
-let phoneIcon: any = null
 
 const play = () => { if (!sndOn("sndNotif")) return; const p = sndFile("sndNotifFile", SND); execAsync(["sh", "-c", `mpv --no-terminal --really-quiet "${p}" 2>/dev/null || ffplay -nodisp -autoexit -loglevel quiet "${p}" 2>/dev/null || paplay "${p}" 2>/dev/null || play -q "${p}" 2>/dev/null`]).catch(() => {}) }
 const clamp = (n: number) => Math.max(0, Math.min(1, n))
 
-const ICONW = 64
+const ICONW = 8
 const W = 400
 const HEADER = 48, ROWH = 50, ROW_GAP = 6, MAXROWS = 7, FOOTER_H = 24
 const H = HEADER + MAXROWS * (ROWH + ROW_GAP) + FOOTER_H + 8
 const TOTALW = ICONW + W
-const plane = makePlane({ w: TOTALW, h: H, yaw: -16, pitch: 5, roll: 1, focal: 1600, dist: 1600, pad: 26 })
+const plane = makePlane({ w: TOTALW, h: H, yaw: 0, pitch: 0, roll: 0, focal: 1600, dist: 1600, pad: 26 })
 
-const MARGIN_L = 30, MARGIN_T = 170
+const EDGE_MARGIN = 18, TOP_MARGIN = 24
 const projQuad = (x0: number, y0: number, x1: number, y1: number): [number, number][] =>
     ([[x0, y0], [x1, y0], [x1, y1], [x0, y1]]).map(([u, v]) => plane.project(u, v))
 
 const DISMISS_Q = projQuad(ICONW + 145, 4, ICONW + 275, 28)
 const FOOTER_Y = HEADER + MAXROWS * (ROWH + ROW_GAP) + 6
+const PANEL_FRAME: [number, number][] = [
+    [ICONW + 10, 0], [ICONW + W - 18, 0], [ICONW + W - 4, 14],
+    [ICONW + W - 4, FOOTER_Y + 31], [ICONW + 24, FOOTER_Y + 31],
+    [ICONW + 10, FOOTER_Y + 17],
+]
 const CLOSE_Q = projQuad(ICONW + 330, FOOTER_Y + 2, ICONW + 400, FOOTER_Y + 31)
 const DISMISS_FOOTER_Q = projQuad(ICONW + 230, FOOTER_Y + 2, ICONW + 290, FOOTER_Y + 31)
 
@@ -211,24 +212,19 @@ let scrollOffset = 0
 let draggingScroll = false
 
 
-let glitchTimer = 0
-let glitchPhase = 0
-interface GlitchBlock { x: number; y: number; w: number; h: number; alpha: number; life: number; color: [number, number, number] }
-let glitchBlocks: GlitchBlock[] = []
-interface HShiftBand { y: number; h: number; shift: number; alpha: number; life: number }
-let hShiftBands: HShiftBand[] = []
-let headerDistort = 0
-
 const applyInput = () => {
     try {
         const gw = win?.get_window?.(); if (!gw) return
         const r = new Cairo.Region()
-        const c = ([[0, 0], [TOTALW, 0], [TOTALW, H], [0, H]]).map(([u, v]) => plane.project(u, v))
-        const xs = c.map(p => p[0]), ys = c.map(p => p[1])
-        r.unionRectangle({
-            x: Math.floor(MARGIN_L + Math.min(...xs)) - 2, y: Math.floor(MARGIN_T + Math.min(...ys)) - 2,
-            width: Math.ceil(Math.max(...xs) - Math.min(...xs)) + 4, height: Math.ceil(Math.max(...ys) - Math.min(...ys)) + 4,
+        const S = winScale(win)
+        const translated = area?.translate_coordinates?.(win, 0, 0)
+        if (!translated || !translated[0]) return
+        const [, ax, ay] = translated
+        const outline = PANEL_FRAME.map(([u, v]) => {
+            const [x, y] = plane.project(u, v)
+            return [ax + x * S, ay + y * S]
         })
+        for (const rect of polygonRects(outline)) r.unionRectangle(rect)
         gw.input_shape_combine_region(r, 0, 0)
     } catch (e) { print("[cyber] applyInput:", e) }
 }
@@ -245,7 +241,6 @@ export const dismissAll = () => {
     if (view === "detail" && selectedApp) {
         const appMsgs = msgs.filter(m => m.app === selectedApp && !m.out)
         appMsgs.forEach(m => { m.out = now })
-        dockNotifDecr(appMsgs.length)
         kick(); timeout(280, () => {
             msgs = msgs.filter(m => m.app !== selectedApp)
             view = "main"; selectedApp = null; hoverRow = -1; dismissHover = false; scrollOffset = 0
@@ -297,80 +292,6 @@ const activate = (m: any) => {
     removeMsg(m)
 }
 
-const CORRUPT_COLORS: [number, number, number][] = [
-    [45, 35, 40],
-    [55, 40, 45],
-    [35, 50, 55],
-    [65, 45, 35],
-    [50, 38, 42],
-    [40, 30, 50],
-    [160, 30, 25],
-    [120, 20, 18],
-]
-
-const drawDataCorruption = (ctx: any, pa: number) => {
-    if (pa < 0.3) return
-    const tl = plane.project(ICONW, 0)
-    const br = plane.project(ICONW + W, H)
-    const ox = MARGIN_L, oy = MARGIN_T
-    ctx.save()
-    hShiftBands.forEach(band => {
-        if (band.alpha < 0.01) return
-        const a = band.alpha * pa
-        const sy = tl[1] + (band.y / H) * (br[1] - tl[1]) + oy
-        const sh = (band.h / H) * (br[1] - tl[1])
-        const sx = band.shift * (br[0] - tl[0]) / W
-        ctx.setSourceRGBA(60/255, 45/255, 50/255, a * 0.35)
-        ctx.rectangle(tl[0] + ox + sx, sy, (br[0] - tl[0]), sh)
-        ctx.fill()
-        ctx.setSourceRGBA(150/255, 120/255, 110/255, a * 0.15)
-        ctx.setLineWidth(0.5)
-        ctx.moveTo(tl[0] + ox + sx, sy)
-        ctx.lineTo(tl[0] + ox + sx + (br[0] - tl[0]), sy)
-        ctx.stroke()
-    })
-
-    glitchBlocks.forEach(block => {
-        if (block.alpha < 0.01) return
-        const [r, g, b] = block.color
-        const a = block.alpha * pa
-
-
-        const p = plane.project(block.x, block.y)
-        const pw = plane.project(block.x + block.w, block.y)
-        const ph = plane.project(block.x, block.y + block.h)
-        const sw = Math.abs(pw[0] - p[0])
-        const sh = Math.abs(ph[1] - p[1])
-
-        ctx.setSourceRGBA(r/255, g/255, b/255, a * 0.55)
-        ctx.rectangle(p[0] + ox, p[1] + oy, Math.max(1, sw), Math.max(1, sh))
-        ctx.fill()
-    })
-
-
-    const minY = tl[1] + oy, maxY = br[1] + oy
-    const minX = tl[0] + ox, maxX = br[0] + ox
-    for (let sy = minY; sy < maxY; sy += 4) {
-        const v = 0.008 + 0.005 * Math.sin(sy * 0.08 + glitchPhase * 0.02)
-        if (v < 0.004) continue
-        ctx.setSourceRGBA(80/255, 30/255, 25/255, v * pa)
-        ctx.setLineWidth(0.3)
-        ctx.moveTo(minX, sy)
-        ctx.lineTo(maxX, sy)
-        ctx.stroke()
-    }
-
-
-    if (headerDistort > 0.01) {
-        const offset = (Math.random() - 0.5) * 3 * headerDistort
-        const hText = view === "detail" && selectedApp ? `MESSAGES > ${selectedApp}` : "MESSAGES"
-        tiltText(ctx, plane, ICONW + 58 + offset * 2, 27, hText, TITLE, 13,
-            [140, 80, 70], headerDistort * 0.3 * pa, { bold: true, glow: 0.2 })
-    }
-
-    ctx.restore()
-}
-
 const draw = (ctx: any) => {
     const groups = getGroups()
     const hasItems = view === "apps" ? true : (view === "detail" && selectedApp ? msgs.some(m => m.app === selectedApp) : groups.length > 0)
@@ -384,42 +305,15 @@ const draw = (ctx: any) => {
 
 
     if (animProg > 0) {
-        const iconA = clamp(animProg * 6) * pa
-        try {
-            if (!phoneIcon) phoneIcon = Cairo.ImageSurface.createFromPNG(ICON_3D)
-            const [pw, ph] = [phoneIcon.getWidth(), phoneIcon.getHeight()]
-            const iconDrawH = 90; const iconDrawW = (pw / ph) * iconDrawH
-            const iconX = 42 - iconDrawW / 2; const iconY = -24
-            ctx.save(); ctx.setSourceRGBA(1, 1, 1, iconA)
-            const [sx, sy] = plane.project(iconX, iconY + iconDrawH / 2)
-            const s = plane.scaleAt(iconX, iconY + iconDrawH / 2)
-            const ang = plane.angleAt(iconX, iconY + iconDrawH / 2)
-            ctx.translate(sx, sy); ctx.rotate(ang); ctx.scale(s, s)
-            ctx.translate(0, -iconDrawH / 2)
-            ctx.scale(iconDrawW / pw, iconDrawH / ph)
-            if (isOvr("notifbadge")) {
-                tintSurface(ctx, phoneIcon, pw, ph, iconA, NEON.notifbadge, 1)
-            } else if (imgTint.value) {
-                tintSurface(ctx, phoneIcon, pw, ph, iconA)
-            } else {
-                ctx.setSourceSurface(phoneIcon, 0, 0); ctx.paint()
-            }
-            ctx.restore()
-        } catch (e) {
-            tiltText(ctx, plane, 42, 22, "\uf095", ICONF, 20, NEON.notifbadge, clamp(animProg * 6) * pa, { bold: true })
-        }
+        // A single cut-corner console surface keeps the tabs, history and app
+        // menus visually together without obscuring the wallpaper completely.
+        projPath(ctx, PANEL_FRAME)
+        const bg = NEON.notifbg
+        ctx.setSourceRGBA(bg[0] / 255, bg[1] / 255, bg[2] / 255, 0.92 * pa * USER_A.notifbg)
+        ctx.fill()
+        strokePath(ctx, plane, PANEL_FRAME, NEON.dock, 0.7 * pa, 1, true)
+        fillQuad(ctx, plane, ICONW + 10, 10, ICONW + 13, FOOTER_Y + 12, NEON.press, 0.8 * pa)
     }
-
-
-    if (animProg > 0) {
-        const GL = ICONW + 10, GR = ICONW + W - 4, GT = HEADER - 19, GB = FOOTER_Y + 2
-        fillQuad(ctx, plane, GL, GT, GR, GB, isOvr("notifbg") ? NEON.notifbg : PANEL_BG, 0.25 * pa * USER_A.notifbg)
-        fillQuad(ctx, plane, GL, GT, GR, GB, NEON.notiftitle, 0.02 * pa * USER_A.notifbg)
-        strokePath(ctx, plane, [[GL, GT], [GL, GB]], [60, 100, 130], 0.1 * pa, 0.8)
-        strokePath(ctx, plane, [[GL, GB], [GR, GB]], [60, 100, 130], 0.1 * pa, 0.8)
-        strokePath(ctx, plane, [[GR, GT], [GR, GB]], [60, 100, 130], 0.1 * pa, 0.8)
-    }
-
 
     if (animProg > 0.10) {
         const labelA = clamp((animProg - 0.10) * 5) * pa
@@ -435,7 +329,7 @@ const draw = (ctx: any) => {
         tiltText(ctx, plane, ICONW + 42, 16, "MESSAGES", RAJDHANI, 18, mC, labelA, { bold: true, glow: 0.6 })
         if (view === "detail" && selectedApp) {
             tiltText(ctx, plane, ICONW + 110, 16, ">", ROBOTO_BOLD, 11, BCYAN, labelA, { glow: 0.6 })
-            tiltText(ctx, plane, ICONW + 122, 16, selectedApp, ROBOTO_BOLD, 11, BCYAN, labelA, { glow: 0.6 })
+            tiltText(ctx, plane, ICONW + 122, 16, selectedApp.slice(0, 24), ROBOTO_BOLD, 11, BCYAN, labelA, { glow: 0.6 })
         } else {
 
             tiltText(ctx, plane, ICONW + 144, 16, APPS_GLYPH, ICONF, 17, aC, labelA * 0.9, { bold: true, glow: 0.6 })
@@ -459,7 +353,6 @@ const draw = (ctx: any) => {
     }
 
 
-    drawDataCorruption(ctx, pa)
 
 
     const now = Date.now()
@@ -727,73 +620,11 @@ const kick = () => {
         if (clickPulse > 0) clickPulse = Math.max(0, clickPulse - 0.05)
         if (rowPulse > 0) rowPulse = Math.max(0, rowPulse - 0.06)
 
-        glitchTimer++
-        glitchPhase += 0.3
-        if (sm && glitchTimer > 120 + Math.random() * 300 && msgs.length > 0) {
-            glitchTimer = 0
-            const r = Math.random()
-
-            if (r < 0.35) {
-                hShiftBands.push({
-                    y: Math.floor(Math.random() * (H - 4)) + 2,
-                    h: 1 + Math.floor(Math.random() * 3),
-                    shift: (Math.random() > 0.5 ? 1 : -1) * (2 + Math.floor(Math.random() * 6)),
-                    alpha: 0.15 + Math.random() * 0.25,
-                    life: 3 + Math.floor(Math.random() * 6)
-                })
-            } else if (r < 0.65) {
-                const count = 2 + Math.floor(Math.random() * 4)
-                const baseY = Math.floor(Math.random() * (H - 20)) + 10
-                const baseX = ICONW + 8 + Math.floor(Math.random() * W * 0.3)
-                for (let i = 0; i < count; i++) {
-                    const color = CORRUPT_COLORS[Math.floor(Math.random() * CORRUPT_COLORS.length)]
-                    glitchBlocks.push({
-                        x: baseX + Math.floor(Math.random() * W * 0.5),
-                        y: baseY + Math.floor(Math.random() * 20) - 10,
-                        w: 1 + Math.floor(Math.random() * 5),
-                        h: 1 + Math.floor(Math.random() * 3),
-                        alpha: 0.12 + Math.random() * 0.2,
-                        life: 3 + Math.floor(Math.random() * 7),
-                        color: color
-                    })
-                }
-            } else if (r < 0.8) {
-
-                const color = CORRUPT_COLORS[Math.floor(Math.random() * CORRUPT_COLORS.length)]
-                glitchBlocks.push({
-                    x: ICONW + 10 + Math.floor(Math.random() * (W - 40)),
-                    y: Math.floor(Math.random() * (H - 10)) + 5,
-                    w: 4 + Math.floor(Math.random() * 12),
-                    h: 1 + Math.floor(Math.random() * 2),
-                    alpha: 0.08 + Math.random() * 0.15,
-                    life: 4 + Math.floor(Math.random() * 8),
-                    color: color
-                })
-            } else if (r < 0.92) {
-
-                headerDistort = 0.15 + Math.random() * 0.3
-            }
-        }
-
-
-        hShiftBands = hShiftBands.filter(b => {
-            b.life--
-            b.alpha *= 0.7
-            return b.life > 0 && b.alpha > 0.005
-        })
-        glitchBlocks = glitchBlocks.filter(b => {
-            b.life--
-            b.alpha *= 0.72
-            return b.life > 0 && b.alpha > 0.005
-        })
-        if (headerDistort > 0) headerDistort *= 0.68
-
         area?.queue_draw()
         const animating = (active && panelIntro < 1) || (!active && panelIntro > 0)
             || msgs.some(m => Date.now() - m.born < 400 || m.out > 0)
             || clickPulse > 0.01 || rowPulse > 0.01
-            || animProg > 0.01 || (active && animProg < 1)
-            || hShiftBands.length > 0 || glitchBlocks.length > 0
+            || (!active && animProg > 0.01) || (active && animProg < 1)
         if (!animating && Date.now() - lastActivity > 400) { loop.cancel(); loop = null }
         if (!active && panelIntro <= 0 && win) win.visible = false
     })
@@ -858,12 +689,12 @@ export const toggleNotifHud = () => {
     if (hudVisible && view === "detail") { switchNotifView("main"); return }
     hudVisible = !hudVisible
     if (hudVisible) {
-        panelIntro = 0; animProg = 0; view = "apps"; selectedApp = null; scrollOffset = 0; menuState = null
+        panelIntro = 0; animProg = 0; view = "main"; selectedApp = null; scrollOffset = 0; menuState = null
         try {
             ;(win as any).gdkmonitor = activeMonitor()
             const S = winScale(win)
             area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S))
-            if (hudWrap) { hudWrap.set_margin_top(Math.round(156 * S)); hudWrap.set_margin_left(Math.round(18 * S)) }
+            if (hudWrap) { hudWrap.set_margin_top(Math.round(TOP_MARGIN * S)); hudWrap.set_margin_right(Math.round(EDGE_MARGIN * S)) }
         } catch {}
         win.visible = true; applyInput()
     }
@@ -971,15 +802,15 @@ export const NotifHudWindow = () => {
     evt.connect("button-release-event", () => { draggingScroll = false; return false })
 
     const wrap = Box({ className: "notifpopups-wrap", child: evt })
-    try { wrap.set_margin_top(Math.round(156 * SCALE)); wrap.set_margin_left(Math.round(18 * SCALE)) } catch {}
+    try { wrap.set_margin_top(Math.round(TOP_MARGIN * SCALE)); wrap.set_margin_right(Math.round(EDGE_MARGIN * SCALE)) } catch {}
     hudWrap = wrap
     win = Window({
         name: "notifhud", className: "aug notifhud",
-        anchor: Anchor.TOP | Anchor.LEFT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,
+        anchor: Anchor.TOP | Anchor.RIGHT, layer: Layer.OVERLAY, exclusivity: Exclusivity.IGNORE,
         visible: false,
         child: wrap,
     })
-    win.connect("realize", applyInput); win.connect("map", applyInput); timeout(120, applyInput)
+    win.connect("realize", applyInput); win.connect("map", applyInput); area.connect("size-allocate", applyInput); timeout(120, applyInput)
     try {
         notifd.connect("notified", (_s: any, id: number) => {
             try { add((notifd.get_notification ? notifd.get_notification(id) : null) ?? { summary: "", body: "" }) } catch (e) { print("[cyber] popup:", e) }

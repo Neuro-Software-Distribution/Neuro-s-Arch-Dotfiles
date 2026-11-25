@@ -85,6 +85,7 @@ export const NEON: Record<string, RGB> = {
 }
 
 export type PaletteName = "NETWATCH" | "BLADE" | "SYNTHWAVE" | "JOHNNY" | "GHOST" | "NSD"
+export const DEFAULT_PALETTE: PaletteName = "NSD"
 
 export const PALETTES: Record<string, Partial<Record<string, RGB>>> = {
     NETWATCH: {
@@ -544,7 +545,7 @@ const updateRadioBg = (name: string) => {
 }
 
 const NOTIF_BUBBLE: Record<string, RGB> = { NSD: [0, 235, 116], NETWATCH: [94, 244, 248] }
-export const notifBubble = { value: NOTIF_BUBBLE.NETWATCH as RGB | null }
+export const notifBubble = { value: NOTIF_BUBBLE.NSD as RGB | null }
 const updateNotifBubble = (name: string) => {
     const e = NOTIF_BUBBLE[name]
     if (!OVR.notifphone && e) setColor("notifphone", e, false)
@@ -614,7 +615,7 @@ export const syncTheme = (name: string, wallpaper = false): Promise<boolean> => 
     return Promise.all([colors, background]).then(results => results.every(Boolean))
 }
 
-let curPalette = "NETWATCH"
+let curPalette = DEFAULT_PALETTE
 // Unlike color matching, this preserves the selected preset after custom edits.
 export const getActivePalette = (): string => curPalette
 
@@ -659,7 +660,7 @@ export const getPaletteName = (): string => {
         }
         if (match) return name
     }
-    return "NETWATCH"
+    return DEFAULT_PALETTE
 }
 
 export const setUserColor = (key: string, rgb: RGB) => {
@@ -700,15 +701,16 @@ const writeLoginColors = (): void => {
 }
 
 export const loadUserColors = (): void => {
+    applyPalette(DEFAULT_PALETTE)
     try {
         const [ok, bytes] = GLib.file_get_contents(USER_PATH)
-        if (!ok) { applyPalette("NETWATCH"); writeLoginColors(); syncTheme("NETWATCH").catch(print); return }
+        if (!ok) { writeLoginColors(); syncTheme(DEFAULT_PALETTE).catch(print); return }
         const src = new TextDecoder().decode(bytes)
         const lines = src.split("\n")
         const declared = /palette\s*=\s*"([A-Z]+)"/.exec(src)?.[1]
         const unavailable = !!declared && !PALETTES[declared]
         // A removed preset falls back to the default; keep explicit user overrides.
-        if (unavailable) applyPalette("NETWATCH")
+        if (unavailable) applyPalette(DEFAULT_PALETTE)
         let saved = ""
         for (const k of Object.keys(OVR)) delete OVR[k]
         for (const line of lines) {
@@ -724,12 +726,15 @@ export const loadUserColors = (): void => {
             setColor(m[1], [parseInt(m[2]), parseInt(m[3]), parseInt(m[4])] as RGB, false)
             if (m[5] !== undefined && USER_A[m[1]] !== undefined) USER_A[m[1]] = Math.max(0, Math.min(1, parseFloat(m[5])))
         }
-        const name = unavailable ? "NETWATCH" : saved || getPaletteName()
+        const name = unavailable ? DEFAULT_PALETTE : saved || getPaletteName()
         applyDerived(name)
         syncTheme(name).catch(print)
         notifyColorChange()
         writeLoginColors()
-    } catch (e) { print("[color] load:", e) }
+    } catch (e) {
+        print("[color] load:", e)
+        applyPalette(DEFAULT_PALETTE); writeLoginColors(); syncTheme(DEFAULT_PALETTE).catch(print)
+    }
 }
 
 export const saveUserColors = (): void => {

@@ -2,6 +2,7 @@ import { createUtilTray } from "./util-tray.ts"
 import { SystemPanel } from "./system-panel.ts"
 
 const system = createUtilTray({
+    visibilityKey: "traySystem",
     label: "CPU / RAM",
     edge: "top",
     width: 220,

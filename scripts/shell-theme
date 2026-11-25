@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NAME="${1:-NETWATCH}"
+NAME="${1:-NSD}"
 AUG="${CYBER_DIR:-$HOME/.config/hypr/themes/cyberpunk}"
 GTK="$AUG/assets/gtk"
 CFG="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -19,8 +19,9 @@ case "$NAME" in
     SYNTHWAVE) ACC="255 45 150";  SEC="45 220 210";  TXT="250 232 250"; DIM="120 85 150";  BAS="10 4 16"; WRN="255 165 60" ;;
     JOHNNY)    ACC="255 208 60";  SEC="94 244 248";  TXT="250 246 228"; DIM="130 116 70";  BAS="6 8 14";  WRN="255 232 130" ;;
     GHOST)     ACC="0 255 120";   SEC="40 255 140";  TXT="200 255 220"; DIM="40 90 60";    BAS="4 12 8";  WRN="120 255 90" ;;
-    *)         NAME="NETWATCH"
-               ACC="255 45 61";   SEC="94 244 248";  TXT="231 241 246"; DIM="80 80 100";   BAS="7 9 13";  WRN="255 180 84" ;;
+    NETWATCH)  ACC="255 45 61";   SEC="94 244 248";  TXT="231 241 246"; DIM="80 80 100";   BAS="7 9 13";  WRN="255 180 84" ;;
+    *)         NAME="NSD"
+               ACC="193 112 255"; SEC="0 235 116"; TXT="225 232 250"; DIM="145 153 180"; BAS="7 9 18"; WRN="0 235 116" ;;
 esac
 
 case "$NAME" in

@@ -924,13 +924,13 @@ export const refreshHudVisibility = () => {
  for (const w of _hudWins) {
    try {
      const recordingHidden = recOn && !recHudShown && sameMonitor(w, recGeom)
-     w.visible = !w._widgetsHidden && !w._monitorDetached && !recordingHidden
+     w.visible = !w._widgetsHidden && !w._trayHidden && !w._monitorDetached && !recordingHidden
    } catch {}
  }
 }
 export const registerHudWindows = (wins) => { _hudWins = wins || []; refreshHudVisibility() }
-const setHudHidden = (hidden, g = recGeom) => { for (const w of _hudWins) { try { if (sameMonitor(w, g)) w.visible = !hidden && !w._monitorDetached && !w._widgetsHidden } catch {} } }
-const showAllHud = () => { for (const w of _hudWins) { try { w.visible = !w._monitorDetached && !w._widgetsHidden } catch {} } }
+const setHudHidden = (hidden, g = recGeom) => { for (const w of _hudWins) { try { if (sameMonitor(w, g)) w.visible = !hidden && !w._monitorDetached && !w._widgetsHidden && !w._trayHidden } catch {} } }
+const showAllHud = () => { for (const w of _hudWins) { try { w.visible = !w._monitorDetached && !w._widgetsHidden && !w._trayHidden } catch {} } }
 export const isRecording = () => recOn
 
 export const toggleHudDuringRec = () => { recHudShown = !recHudShown; setHudHidden(!recHudShown); return recHudShown }

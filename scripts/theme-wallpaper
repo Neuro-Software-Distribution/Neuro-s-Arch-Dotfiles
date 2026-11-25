@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NAME="${1:-NETWATCH}"
+NAME="${1:-NSD}"
 WALLPAPERS_PATH="${HOME}/Pictures/Wallpapers"
 USER_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/cyberarch"
 THEME="${CYBER_DIR:-${HOME}/.config/hypr/themes/cyberpunk}"

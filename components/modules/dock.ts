@@ -2,20 +2,13 @@ import { RUNTIME_DIR } from "../../env.ts"
 import { Box, DrawingArea, EventBox } from "./widget.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import { interval, timeout, execAsync } from "astal"
-import AstalNotifd from "gi://AstalNotifd"
 import { toggleModal, isModalOpen, onModalChange } from "./cmodal.ts"
-import { toggleNotifHud, isNotifHudOpen, notifCount } from "./notifmessages.ts"
 import { togglePlayer, isPlayerOpen, onPlayerChange, playPauseActive } from "./player.ts"
-import { makePlane, strokePath, tiltText, tiltImage, fillQuad } from "./proj.ts"
-import { NEON, f, RGB, onColorChange, imgTint, neonBtn, notifBubble } from "./colors.ts"
+import { makePlane, strokePath, tiltText, fillQuad } from "./proj.ts"
+import { NEON, f, onColorChange, neonBtn } from "./colors.ts"
 import { animOn } from "./config.ts"
 import { polygonRects } from "./input-region.ts"
-const NOTIF_RED: RGB = NEON.notifbadge
 import { CYBER_DIR, scaleOf } from "../../env.ts"
-
-const Cairo: any = (imports as any).cairo
-let _phoneIcon: any = null
-const phoneIcon = () => { if (!_phoneIcon) try { _phoneIcon = Cairo.ImageSurface.createFromPNG(`${CYBER_DIR}/assets/icons/phone.png`) } catch { _phoneIcon = null } return _phoneIcon }
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 const statePolls = new Map<string, { promise: Promise<string>, until: number }>()
@@ -34,7 +27,6 @@ import { TITLE, ICONF } from "./fonts.ts"
 const VERT_TILES = [
  { key: "vol", icon: "", label: "", sc: "V", state: () => pollState("wpctl get-volume @DEFAULT_AUDIO_SINK@").then(o => !/MUTED/.test(o)) },
  { key: "brt", icon: "", label: "", sc: "I", state: () => Promise.resolve(true) },
- { key: "notification", icon: "", label: "", sc: "M", state: () => Promise.resolve(isNotifHudOpen()) },
  { key: "music", icon: "", label: "", sc: "O", eq: true, state: () => pollState("playerctl -a status 2>/dev/null").then(o => /playing/i.test(o)) },
 ]
 const HORIZ_TILES = [
@@ -57,8 +49,7 @@ const hsp = makePlane({ w: HPLANE_W, h: HPLANE_H, yaw: -15, pitch: 20, roll: 3.2
 const VLAYOUT: { k: string; x: number; y: number; w: number; h: number }[] = [
  { k: "vol", x: BADGE + BGAP, y: 0, w: VSW, h: VSH },
  { k: "brt", x: BADGE + BGAP, y: VSH + VG, w: VSW, h: VSH },
- { k: "notification", x: BADGE + BGAP, y: 2 * (VSH + VG), w: VSW, h: VSH },
- { k: "music", x: BADGE + BGAP, y: 3 * (VSH + VG), w: VSW, h: VSH },
+ { k: "music", x: BADGE + BGAP, y: 2 * (VSH + VG), w: VSW, h: VSH },
 ]
 
 const HLAYOUT: { k: string; x: number; y: number; w: number; h: number }[] = [
@@ -150,10 +141,6 @@ const pip = (px: number, py: number, poly: [number, number][]) => {
  }
  return inside
 }
-let _dockArea: any = null
-const _notifd = AstalNotifd.get_default()
-try { _notifd.connect("notified", () => { if (_dockArea) _dockArea.queue_draw() }) } catch {}
-export const dockNotifDecr = () => { if (_dockArea) _dockArea.queue_draw() }
 const hoverers: any[] = []
 const hoverBus: any = { key: null }
 const kickHover = () => { for (const h of hoverers) h() }
@@ -171,15 +158,14 @@ const makeHover = (layout: typeof VLAYOUT, hv: any, getHovered: () => string | n
  return { kick, cancel: () => hoverT && (hoverT.cancel(), (hoverT = null)) }
 }
 
-const VertDock = (mon?: any, includeNotifications = true) => {
- const layout = VLAYOUT.filter(s => includeNotifications || s.k !== "notification")
-     .map((s, i) => ({ ...s, y: i * (VSH + VG) }))
+const VertDock = (mon?: any) => {
+ const layout = VLAYOUT
  const vsp = makePlane({ w: VPLANE_W, h: layout.length * VSH + (layout.length - 1) * VG - 15,
      yaw: -30, pitch: 12, roll: 1, focal: 1050, dist: 1050, pad: 20 })
  const S = scaleOf(mon)
  let destroyed = false
  const on = {}, open = {}, hv = {}
-  const area = DrawingArea({}); area.set_size_request(Math.round((vsp.width + 10) * S), Math.round((vsp.height + 20) * S)); _dockArea = area
+  const area = DrawingArea({}); area.set_size_request(Math.round((vsp.width + 10) * S), Math.round((vsp.height + 20) * S))
  const inputRects = layout.flatMap(s => polygonRects(vertSlotFrame(s.x, s.y, s.w, s.h)
      .map(([u, v]) => vsp.project(u, v).map(n => n * S))))
  area._hudInputRects = () => inputRects
@@ -197,26 +183,6 @@ const VertDock = (mon?: any, includeNotifications = true) => {
   const isz = s.h * 0.35
   const ialpha = Math.min(1, (on[s.k] ? 1 : 0.78) + hov * 0.22)
   if (t.eq) drawEq(ctx, vsp, s, edge, ialpha)
-  else if (t.key === "notification") {
-    tiltImage(ctx, vsp, 45, 98, phoneIcon(), s.h * 0.47, ialpha, (on[s.k] ? 0.4 : 0) + hov * 0.5, 0.08, open[s.k] ? NOTIF_RED : (imgTint.value ? edge : null), open[s.k] ? 0.95 : imgTint.strength)
-    const nc = notifCount()
-    if (nc > 0) {
-      const bx = 58, by = 90, bw = 13, bh = 18, bv = 3
-      const oc: [number, number][] = [[bx + bv, by], [bx + bw - bv, by], [bx + bw, by + bv], [bx + bw, by + bh - bv], [bx + bw - bv, by + bh], [bx + bv, by + bh], [bx, by + bh - bv], [bx, by + bv]]
-      const op = oc.map(([u, v]) => vsp.project(u, v))
-      ctx.newPath(); op.forEach(([x, y], k) => k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)); ctx.closePath()
-      const nbc = notifBubble.value ?? NEON.press
-      ctx.setSourceRGBA(nbc[0] / 255, nbc[1] / 255, nbc[2] / 255, 0.92); ctx.fill()
-      const ccx = op.reduce((s, p) => s + p[0], 0) / 8, ccy = op.reduce((s, p) => s + p[1], 0) / 8
-      const ang = Math.atan2(op[1][1] - op[0][1], op[1][0] - op[0][0])
-      const psc = Math.hypot(op[2][0] - op[1][0], op[2][1] - op[1][1]) / bv
-      ctx.save(); ctx.translate(ccx, ccy); ctx.rotate(ang * 0.38); ctx.scale(psc, psc)
-      ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(bh * 0.45)
-      const tw = ctx.textExtents(String(nc)).width
-      ctx.setSourceRGBA(0, 0, 0, 1); ctx.moveTo(-tw / 2, bh * 0.2); ctx.showText(String(nc))
-      ctx.restore()
-    }
-  }
   else tiltText(ctx, vsp, s.x + s.w / 2, s.y + s.h * 0.60, t.icon, ICONF, isz, edge, ialpha, { align: "c", extraRotate: 0.10, glow: (on[s.k] ? 0.4 : 0) + hov * 0.5 })
  drawBadgeBox(ctx, vsp, 0, s.y + (s.h - BADGE) / 2, BADGE, t.sc, edge)
  }
@@ -232,10 +198,10 @@ const VertDock = (mon?: any, includeNotifications = true) => {
  const evt = EventBox({ child: area })
  let musicTap: any = null
  try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK) } catch {}
- evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} const k = hitSlot(x, y); if (!k) return false; if (k === "music") { let dbl = false; try { dbl = e.get_event_type() === Gdk.EventType.DOUBLE_BUTTON_PRESS } catch {} if (dbl) { if (musicTap) { musicTap.cancel(); musicTap = null } playPauseActive() } else { if (musicTap) musicTap.cancel(); musicTap = timeout(230, () => { musicTap = null; togglePlayer(); openRefresh() }) } } else if (k === "notification") { toggleNotifHud(); openRefresh() } else if (k === "rec") { sh(`${CYBER_DIR}/scripts/screenrecord`); openRefresh() } else { toggleModal(k); openRefresh() } return false })
+ evt.connect("button-press-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} const k = hitSlot(x, y); if (!k) return false; if (k === "music") { let dbl = false; try { dbl = e.get_event_type() === Gdk.EventType.DOUBLE_BUTTON_PRESS } catch {} if (dbl) { if (musicTap) { musicTap.cancel(); musicTap = null } playPauseActive() } else { if (musicTap) musicTap.cancel(); musicTap = timeout(230, () => { musicTap = null; togglePlayer(); openRefresh() }) } } else if (k === "rec") { sh(`${CYBER_DIR}/scripts/screenrecord`); openRefresh() } else { toggleModal(k); openRefresh() } return false })
  evt.connect("motion-notify-event", (_w, e) => { let x = 0, y = 0; try { const c = e.get_coords?.(); if (c) { x = c[1] / S; y = c[2] / S } } catch {} hoverBus.key = hitSlot(x, y); kickHover(); return false })
  evt.connect("leave-notify-event", () => { hoverBus.key = null; kickHover(); return false })
- openRefresh = () => { let ch = false; for (const s of layout) { const o = s.k === "music" ? isPlayerOpen() : s.k === "notification" ? isNotifHudOpen() : isModalOpen(s.k); if (o !== open[s.k]) { open[s.k] = o; ch = true } } if (ch) area.queue_draw() }
+ openRefresh = () => { let ch = false; for (const s of layout) { const o = s.k === "music" ? isPlayerOpen() : isModalOpen(s.k); if (o !== open[s.k]) { open[s.k] = o; ch = true } } if (ch) area.queue_draw() }
  const stateRefresh = () => { if (destroyed || !area.get_mapped()) return; layout.forEach(s => { const t = tileOf(s.k); (t.state ? t.state() : Promise.resolve(true)).then(v => { if (destroyed) return; if (v !== on[s.k]) { on[s.k] = v; area.queue_draw() } }).catch(() => {}) }) }
  stateRefresh()
  let mTick: any = null
@@ -252,7 +218,7 @@ const VertDock = (mon?: any, includeNotifications = true) => {
  area.connect("map", () => { stateRefresh(); musicPoll(); openRefresh() })
  area.connect("unmap", () => { if (mTick) { mTick.cancel(); mTick = null }; hover.cancel(); hoverBus.key = null })
  const a = interval(6000, stateRefresh), mp = interval(1500, musicPoll)
- area.connect("destroy", () => { destroyed = true; a.cancel(); mp.cancel(); mTick && mTick.cancel(); hover.cancel(); recolorV(); offModal(); offPlayer(); if (musicTap) musicTap.cancel(); hoverers.splice(hoverers.indexOf(hover.kick), 1); if (_dockArea === area) _dockArea = null })
+ area.connect("destroy", () => { destroyed = true; a.cancel(); mp.cancel(); mTick && mTick.cancel(); hover.cancel(); recolorV(); offModal(); offPlayer(); if (musicTap) musicTap.cancel(); hoverers.splice(hoverers.indexOf(hover.kick), 1) })
   return evt
 }
 
@@ -305,6 +271,6 @@ const HorizDock = (mon?: any) => {
   return evt
 }
 
-export const Toggles = (mon?: any, includeNotifications = true) => Box({ className: "dock", children: [VertDock(mon, includeNotifications)] })
+export const Toggles = (mon?: any) => Box({ className: "dock", children: [VertDock(mon)] })
 
 export { HorizDock }

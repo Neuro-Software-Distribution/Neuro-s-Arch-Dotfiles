@@ -28,7 +28,7 @@ if command -v gsettings >/dev/null 2>&1; then
 fi
 
 
-CYBER_DIR="$AUG" "$AUG/scripts/shell-theme" "${PALETTE:-NETWATCH}"
+CYBER_DIR="$AUG" "$AUG/scripts/shell-theme" "${PALETTE:-NSD}"
 
 mkdir -p "$HOME/.config/kitty"
 [ -e "$HOME/.config/kitty/kitty.conf" ] || [ -L "$HOME/.config/kitty/kitty.conf" ] || cp "$AUG/assets/kitty/kitty.conf" "$HOME/.config/kitty/kitty.conf"

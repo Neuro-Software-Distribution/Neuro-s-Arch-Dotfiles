@@ -6,7 +6,7 @@ import GLib from "gi://GLib"
 import Gio from "gi://Gio"
 import GdkPixbuf from "gi://GdkPixbuf"
 import { Window, DrawingArea, EventBox, Keymode, Layer, Anchor } from "./widget.ts"
-import { PALETTES, getActivePalette, syncTheme, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha, USER, onColorChange } from "./colors.ts"
+import { PALETTES, DEFAULT_PALETTE, getActivePalette, syncTheme, applyPalette, saveUserColors, setUserColor, getUserColor, rgbToHex, hasAlpha, getUserAlpha, setUserAlpha, USER, onColorChange } from "./colors.ts"
 import { closeAllModals } from "./cmodal.ts"
 import { TITLE, MONO, CYAN, ACC, HEADER, txt, drawGlass, Cairo, ch } from "./glass.ts"
 import { ICONF } from "./fonts.ts"
@@ -32,7 +32,7 @@ const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
 // themeMod is modifiers only so that one saves when u let go, not on a press
 const grabKeys = () => sh(`hyprctl dispatch 'hl.dsp.submap("cyberdeck_capture")'`)
 const releaseKeys = () => sh(`hyprctl dispatch 'hl.dsp.submap("reset")'`)
-export let selPalette = "NETWATCH"
+export let selPalette = DEFAULT_PALETTE
 
 export const readTune = () => {
     selPalette = getActivePalette()
@@ -412,7 +412,7 @@ export const drawColors = (ctx, g, x, y, w) => {
     const names = Object.keys(PALETTES), cols = 4, bw = (w - (cols - 1) * 8) / cols, bh = 32, top = y + 16
     names.forEach((name, i) => {
         const bx = x + (i % cols) * (bw + 8), by = top + Math.floor(i / cols) * (bh + 8)
-        drawBtn(ctx, g.push, bx, by, bw, bh, name === "NETWATCH" ? "★" + name : name, () => applyColors(name), selPalette === name, selPalette === name ? (USER.cyan as any) : g.col, "", 13)
+        drawBtn(ctx, g.push, bx, by, bw, bh, name === DEFAULT_PALETTE ? "★" + name : name, () => applyColors(name), selPalette === name, selPalette === name ? (USER.cyan as any) : g.col, "", 13)
     })
     const gridH = Math.ceil(names.length / cols) * (bh + 8)
     const footY = g.Y + g.h - 48
@@ -459,7 +459,7 @@ export const drawColors = (ctx, g, x, y, w) => {
         ctx.setSourceRGBA(g.accent[0], g.accent[1], g.accent[2], 0.85); ctx.setLineWidth(3)
         ctx.newPath(); ctx.moveTo(x + w + 4, visTop + fillH); ctx.lineTo(x + w + 4, visTop + fillH + barH); ctx.stroke()
     }
-    drawBtn(ctx, g.push, x, footY, w, 38, "RESET", () => { applyPalette("NETWATCH"); saveUserColors(); readTune(); selPalette = "NETWATCH"; kbScroll = 0; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 13)
+    drawBtn(ctx, g.push, x, footY, w, 38, "RESET", () => { applyPalette(DEFAULT_PALETTE); saveUserColors(); syncTheme(DEFAULT_PALETTE, true).catch(print); readTune(); selPalette = DEFAULT_PALETTE; kbScroll = 0; ctrl.requestDraw() }, false, [1, 0.4, 0.44], "", 13)
 }
 
 const noPush = (_r: any) => {}
@@ -2302,6 +2302,12 @@ type CfgKind = "tog" | "snd" | "car" | "glow"
 type CfgRow = { t: CfgKind; k: string; label: string; dep?: string; grp?: string; master?: boolean }
 
 const CFG_SECTIONS: [string, CfgRow[]][] = [
+    ["// ::desktop trays", [
+        { t: "tog", k: "trayControls", label: "CONTROLS TRAY" },
+        { t: "tog", k: "trayInformation", label: "WEATHER / MARKETS TRAY" },
+        { t: "tog", k: "traySystem", label: "CPU / RAM TRAY" },
+    ]],
+
     ["// ::animations", [
         { t: "tog", k: "anim", label: "TOGGLE ANIMATIONS", master: true },
         { t: "tog", k: "animWorkspace", label: "WORKSPACE-SWITCH ANIMATION" },

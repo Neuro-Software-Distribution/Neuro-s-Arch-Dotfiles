@@ -19,6 +19,7 @@ import { openTimeModal } from "./components/modules/timeset.ts"
 import { ControlsTray, toggleControlsTray } from "./components/modules/controls-tray.ts"
 import { SystemTray, toggleSystemTray } from "./components/modules/system-tray.ts"
 import { widgetInputRects } from "./components/modules/input-region.ts"
+import { cfgBool, onConfigChange } from "./components/modules/config.ts"
 import { OsdWindow } from "./components/modules/osd.ts"
 import { NotifPopupWindow, notifReadCurrent, notifDismiss } from "./components/modules/notifpopup.ts"
 import { NotifHudWindow, toggleNotifHud, dismissAll, isDetailView } from "./components/modules/notifmessages.ts"
@@ -62,6 +63,14 @@ const toggleWidgets = () => {
  catch (e) { print("[widgets] could not save visibility:", e) }
 }
 
+const trayVisibilityKeys: Record<string, string> = {
+ "controls-tray": "trayControls", "information-tray": "trayInformation", "system-tray": "traySystem",
+}
+onConfigChange(() => {
+ for (const w of hudWins) if (w._trayVisibilityKey) w._trayHidden = !cfgBool(w._trayVisibilityKey)
+ refreshHudVisibility()
+})
+
 const surface = (mon, name, anchor, child, extra = {}) => {
  const wrap = Box({ className: `aug-wrap ${name}-wrap`, child })
  const w = Window({
@@ -74,6 +83,8 @@ const surface = (mon, name, anchor, child, extra = {}) => {
  child: wrap,
  ...extra,
  })
+ w._trayVisibilityKey = trayVisibilityKeys[name]
+ w._trayHidden = !!w._trayVisibilityKey && !cfgBool(w._trayVisibilityKey)
  w._hudRoot = child
  child._onHudInputChanged = () => applyHudInput(w)
  w.connect("destroy", () => { child._onHudInputChanged = null })
@@ -230,7 +241,7 @@ const createMonitorHud = (mon) => {
  })
  for (const w of hudWins.slice(first)) {
  w._widgetsHidden = !widgetsVisible
- if (!widgetsVisible) w.visible = false
+ if (!widgetsVisible || w._trayHidden) w.visible = false
  // Geometry is cheap enough to update with allocation, before the next paint.
  w.connect_after("size-allocate", () => applyHudInput(w))
  w.connect("map", () => { w._inputKey = null; applyHudInput(w) })
@@ -274,7 +285,7 @@ const syncMonitorHud = () => {
  w._monitorDetached = !online
  w.gdkmonitor = mon
  w.layer = hudOnTop ? Layer.TOP : Layer.BOTTOM
- if (online && widgetsVisible && !isRecording()) w.visible = true
+ if (online && widgetsVisible && !w._trayHidden && !isRecording()) w.visible = true
  deferShape(w)
  }
  }

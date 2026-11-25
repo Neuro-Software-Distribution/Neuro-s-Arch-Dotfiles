@@ -11,6 +11,8 @@ const DEF: Record<string, CfgVal> = {
  animNotif: true, animMusic: true, animWheel: true, animInteraction: true,
  interactionGlow: "normal",
 
+ trayControls: true, trayInformation: true, traySystem: true,
+
  snd: true, sndNotif: true, sndNotifFile: "",
  sndWheel: true, sndWheelStart: "", sndWheelActive: "", sndWheelEnd: "",
  sndOverlay: true, sndOverlayFile: "",

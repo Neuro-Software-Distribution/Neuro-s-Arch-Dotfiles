@@ -5,12 +5,13 @@ import GLib from "gi://GLib"
 import { polygonRects, clipRects } from "./input-region.ts"
 import { scaleOf } from "../../env.ts"
 import { NEON, onColorChange } from "./colors.ts"
-import { animOn, onConfigChange } from "./config.ts"
+import { animOn, cfgBool, onConfigChange } from "./config.ts"
 import { createAttention, drawAttentionEdge, attentionColors } from "./attention.ts"
 import { TITLE, MONO } from "./fonts.ts"
 
 type TrayOptions = {
     label: string
+    visibilityKey: string
     side?: "left" | "right"
     edge?: "bottom" | "right" | "top"
     code?: string
@@ -22,6 +23,7 @@ type TrayOptions = {
 export const createUtilTray = (options: TrayOptions) => {
     const trays = new Map<any, { toggle: () => boolean }>()
     const toggle = (): boolean => {
+        if (!cfgBool(options.visibilityKey)) return false
         const tray = trays.get(activeMonitor()) || trays.values().next().value
         return tray?.toggle() ?? false
     }
