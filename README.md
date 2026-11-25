@@ -7,6 +7,15 @@
 ### **A Hyprland *netrunner* rice with built on AGS v3 / Astal**
 
 
+## NeurOS integration status
+
+This repository is the source for the NeurOS desktop. The sibling
+[NeurOS-Packages desktop documentation](../NeurOS-Packages/docs/DESKTOP.md)
+describes the packaged interface/session, update workflow and redistribution
+limits. The development ISO includes these packages, but a complete installation
+and graphical desktop validation have not yet been recorded. The beta checklist
+is in [NeurOS-ISO](../NeurOS-ISO/docs/BETA.md).
+
 ## Table of Contents
 
 - [HERE](#table-of-contents)
