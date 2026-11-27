@@ -13,8 +13,10 @@ This repository is the source for the NeurOS desktop. The sibling
 [NeurOS-Packages desktop documentation](../NeurOS-Packages/docs/DESKTOP.md)
 describes the packaged interface/session, update workflow and redistribution
 limits. The development ISO includes these packages, but a complete installation
-and graphical desktop validation have not yet been recorded. The beta checklist
-is in [NeurOS-ISO](../NeurOS-ISO/docs/BETA.md).
+and graphical desktop validation have not yet been recorded. The November 25
+image reached SDDM in QEMU but then displayed a black screen; investigate session
+and display logs before assuming the packaged desktop is usable. The beta
+checklist is in [NeurOS-ISO](../NeurOS-ISO/docs/BETA.md).
 
 ## Table of Contents
 
