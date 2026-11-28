@@ -1,7 +1,10 @@
 #!/usr/bin/env python3
 """Preference preservation tests against disposable files, including symlinks."""
+import configparser
 import importlib.util
+import os
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -26,6 +29,25 @@ class Preferences(unittest.TestCase):
             config.read(user)
             self.assertEqual(config['Settings']['gtk-font-name'], 'Sans 18')
             self.assertEqual(config['Settings']['gtk-enable-animations'], 'false')
+
+    def test_shell_theme_writes_notification_palette(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            fake = root / 'bin'; fake.mkdir()
+            for name in ('hyprctl', 'gsettings', 'busctl'):
+                command = fake / name
+                command.write_text('#!/bin/sh\nexit 0\n')
+                command.chmod(0o755)
+            env = dict(os.environ, HOME=tmp, XDG_CONFIG_HOME=str(root / 'config'),
+                       CYBER_DIR=str(ROOT), PATH=str(fake) + ':' + os.environ['PATH'])
+            result = subprocess.run(['bash', str(ROOT / 'scripts/shell-theme'), 'BLADE'], env=env,
+                                    capture_output=True, text=True, timeout=15)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            palette = configparser.ConfigParser(interpolation=None)
+            palette.read(root / 'config/cyberarch/notification.palette')
+            self.assertEqual(palette['palette']['accent'], '#b75107')
+            self.assertEqual(palette['palette']['secondary'], '#c37812')
+            self.assertEqual(palette['palette']['background'], '#040302')
 
 
 if __name__ == '__main__':

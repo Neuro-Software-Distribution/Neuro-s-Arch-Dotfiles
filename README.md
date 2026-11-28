@@ -55,7 +55,7 @@ checklist is in [NeurOS-ISO](../NeurOS-ISO/docs/BETA.md).
 
 - [ ] Fish is cool but I might return to bash as the default shell
 
-- [X] Cool retro-term support won't be here kitty is the default shell (**Removed the other terminal supports**)
+- [X] Cool retro-term support won't be here kitty is the default term emulator (**Removed the other terminal supports**)
 
 - [ ] There is a 'cyberspace' online terminal webkit GUI here but I haven't investigate it yet and wasn't working...so might ditch it as well
 
@@ -116,6 +116,8 @@ await migration.
 - **Hyprland ≥ 0.56**
 - An **AUR helper**: `yay` or `paru` (Always check PKGBUILD btw)
 - A running Hyprland session (so theming + first-run setup can apply)
+- The native notification renderer needs GTK 3, `gtk-layer-shell`, `pkgconf`,
+  a C compiler and `libastal-notifd-git`. The installer checks these dependencies.
 
 ---
 
@@ -127,6 +129,13 @@ cd Neuro-s-Arch-Dotfiles
 chmod +x install.sh
 ./install.sh
 ```
+
+The installer builds the C notification renderer and selects it for new
+installations when the build succeeds. It starts after the NeurOS shell is
+ready; an existing explicit opt-out is preserved. If the shell is already
+running, use the notification setup command below or restart the shell after
+installation. A different notification server is left running if NeurOS
+cannot safely hand it off.
 
 ---
 
@@ -147,6 +156,8 @@ the release in a temporary worktree before fast-forwarding, waits for HUD readin
 and restores the previous commit if activation fails. Releases that change the
 installer or dependencies require a separate installation or package upgrade.
 Local edits are never automatically stashed.
+When native notifications are selected, the updater also requires the C
+renderer to build and become ready before accepting the release.
 
 The GitHub repository configured as `origin` must have a published, non-prerelease
 GitHub release with a version tag (for example `v2.46`). The tag must identify a
@@ -274,6 +285,17 @@ Kitty follows the selected palette through `~/.config/kitty/cyberarch-colors.con
 padding, opacity, and keybindings stay in `kitty.conf`. Open Kitty windows reload
 automatically using [Kitty’s configuration reload signal](https://sw.kovidgoyal.net/kitty/conf/).
 
+> Well Dunst was bitchin about cut corners and I wanted cut corners...so I brought C with me to fix the problem
+now NeurOS-Notf uses C for showing the fucking notificiations
+
+Enable the C notification renderer with
+`bash ~/.config/hypr/themes/cyberpunk/scripts/notifications enable`; see the
+[notification guide](components/notifications/README.md) for controls, fallback
+behavior, and setup for existing installations. To return to the NeurOS shell
+popup and keep that choice through future installs, use the same command with
+`disable` instead of `enable`.
+
+
 ### System & capture
 
 | Keybind | Action |
@@ -351,6 +373,8 @@ cyberpunk/
 <div align="center">
 
 ## Support the Original Author
+
+> Fuck my obsession with Physically informed Galaga and gambling addiction with π. They got real cool shit go support the original author. Mwah.
 
 [![Star on GitHub](https://img.shields.io/github/stars/ARCANGEL0/CyberArch-DotFiles?style=social)](https://github.com/ARCANGEL0/CyberArch-dotfiles)
 [![Follow on GitHub](https://img.shields.io/github/followers/ARCANGEL0?style=social)](https://github.com/ARCANGEL0)

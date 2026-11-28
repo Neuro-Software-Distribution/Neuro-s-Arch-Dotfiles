@@ -636,7 +636,10 @@ const kick = () => {
 }
 
 const add = (n: any) => {
+    if (n?.app_name === "NeurOS internal readiness") return
     if (_readFilter && _readFilter(n.id ?? 0)) return
+    // A notification replacement uses the same id; keep a single history row.
+    if (n?.id) msgs = msgs.filter(m => m.id !== n.id)
     const appName = (n?.summary || n?.app_name || "UNKNOWN").toString().toUpperCase().slice(0, 24)
     let desktopEntry = ""
     try { desktopEntry = ((n?.get_str_hint?.("desktop-entry") ?? n?.desktopEntry ?? "") + "").trim() } catch { }
@@ -819,6 +822,9 @@ export const NotifHudWindow = () => {
     try {
         notifd.connect("notified", (_s: any, id: number) => {
             try { add((notifd.get_notification ? notifd.get_notification(id) : null) ?? { summary: "", body: "" }) } catch (e) { print("[cyber] popup:", e) }
+        })
+        notifd.connect("resolved", (_s: any, id: number, reason: number) => {
+            if (reason === AstalNotifd.ClosedReason.DISMISSED_BY_USER) removeFromHistory(id)
         })
     } catch (e) { print("[cyber] notifpopup init:", e) }
 

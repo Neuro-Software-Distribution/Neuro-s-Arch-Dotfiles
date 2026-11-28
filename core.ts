@@ -43,6 +43,15 @@ import { UtilityWheelWindow, toggleUtilityWheel } from "./components/modules/uti
 const SCSS = `${COMPONENTS_DIR}/style/cyber.scss`
 const CSS = GLib.getenv("CYBER_CSS") || `${RUNTIME_DIR}/shell.css`
 let shellReady = false
+const notificationAction = (method: "Read" | "Dismiss", fallback: () => void) => {
+ try {
+ Gio.DBus.session.call("io.neuros.NotificationRenderer", "/io/neuros/NotificationRenderer",
+  "io.neuros.NotificationRenderer", method, null, new GLib.VariantType("(b)"),
+  Gio.DBusCallFlags.NO_AUTO_START, 1500, null, (bus, result) => {
+   try { if (!bus.call_finish(result).deep_unpack()[0]) fallback() } catch { fallback() }
+  })
+ } catch { fallback() }
+}
 const compileCss = async () => {
  if (!GLib.getenv("CYBER_CSS")) await execAsync(["sassc", SCSS, CSS])
  App.apply_css(CSS, true)
@@ -328,10 +337,10 @@ App.start({
  try { togglePlayer() } catch (e) { print(e) }
  reply("ok")
  } else if (request === "notif-read") {
- try { notifReadCurrent() } catch (e) { print(e) }
+ try { notificationAction("Read", notifReadCurrent) } catch (e) { print(e) }
  reply("ok")
   } else if (request === "notif-dismiss") {
-  try { isDetailView() ? dismissAll() : notifDismiss() } catch (e) { print(e) }
+  try { isDetailView() ? dismissAll() : notificationAction("Dismiss", notifDismiss) } catch (e) { print(e) }
  reply("ok")
  } else if (request === "notif-hud") {
  try { toggleNotifHud() } catch (e) { print(e) }

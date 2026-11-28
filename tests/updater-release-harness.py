@@ -46,6 +46,7 @@ exit "${TEST_CURL_EXIT:-0}"
 
     def run_update(self, status, body, *args, curl_exit='0'):
         env = dict(os.environ, HOME=str(self.home), XDG_CONFIG_HOME=str(self.home / '.config'),
+                   XDG_STATE_HOME=str(self.home / '.local/state'),
                    PATH=str(self.bin) + ':' + os.environ['PATH'], TEST_HTTP=status,
                    TEST_BODY=body, TEST_CURL_EXIT=curl_exit)
         return subprocess.run(['bash', str(self.repo / 'updater.sh'), *args], env=env,
@@ -101,6 +102,100 @@ exit "${TEST_CURL_EXIT:-0}"
         result = self.run_update('404', '{}', 'check')
         self.assertEqual(result.stdout, '0\n2.45\n2.45\n')
         self.assertEqual(result.stderr, '')
+
+    def test_failed_cache_generation_preserves_previous_release(self):
+        first = self.run_update('200', '{"tag_name":"v2.46"}', 'check')
+        self.assertEqual(first.stdout.splitlines()[0], '1')
+        cache = self.home / '.config/cyberarch/update.json'
+        previous = cache.read_bytes()
+        jq = shutil.which('jq')
+        wrapper = self.bin / 'jq'
+        wrapper.write_text('#!/bin/bash\nif [ "${1:-}" = --arg ]; then printf broken; exit 1; fi\nexec ' + jq + ' "$@"\n')
+        wrapper.chmod(0o755)
+        result = self.run_update('200', '{"tag_name":"v2.47"}', 'check')
+        self.assertEqual(result.stdout, '0\n2.45\n2.45\n')
+        self.assertEqual(cache.read_bytes(), previous)
+        self.assertEqual(list(cache.parent.glob('.update.json.*')), [])
+
+    def test_update_requires_renderer_build_when_native_notifications_are_enabled(self):
+        scripts = self.repo / 'scripts'
+        scripts.mkdir()
+        preflight = scripts / 'preflight'
+        preflight.write_text('''#!/bin/bash
+set -eu
+if [ "${NEUROS_REQUIRE_NOTIFICATION_RENDERER:-0}" = 1 ]; then
+    echo 'renderer build failed' >&2
+    exit 52
+fi
+mkdir -p "$1"
+echo shell > "$1/shell.js"
+echo css > "$1/shell.css"
+''')
+        preflight.chmod(0o755)
+        restart = scripts / 'restart'
+        restart.write_text('#!/bin/bash\ntouch "$HOME/restarted"\n')
+        restart.chmod(0o755)
+        def git(*args):
+            return subprocess.run(['git', '-C', str(self.repo), *args], check=True,
+                                  capture_output=True, text=True).stdout.strip()
+        git('add', 'scripts')
+        git('commit', '-qm', 'add test build')
+        old = git('rev-parse', 'HEAD')
+        remote = self.root / 'remote.git'
+        subprocess.run(['git', 'clone', '--bare', str(self.repo), str(remote)], check=True, capture_output=True)
+        (self.repo / 'VERSION').write_text('2.46\n')
+        git('add', 'VERSION')
+        git('commit', '-qm', 'release')
+        target = git('rev-parse', 'HEAD')
+        git('tag', 'v2.46')
+        git('push', str(remote), 'refs/tags/v2.46')
+        git('reset', '--hard', old)
+        git('config', f'url.{remote.as_uri()}.insteadOf', 'https://github.com/example/project.git')
+        real_git = shutil.which('git')
+        wrapper = self.bin / 'git'
+        wrapper.write_text('''#!/bin/bash
+if [ "${1:-}" = -C ] && [ "${3:-}" = remote ] && [ "${4:-}" = get-url ]; then
+    echo https://github.com/example/project.git
+    exit 0
+fi
+exec ''' + real_git + ''' "$@"
+''')
+        wrapper.chmod(0o755)
+        state = self.home / '.local/state/cyberarch'
+        state.mkdir(parents=True)
+        (state / 'native-notifications-enabled').touch()
+        release = '{"tag_name":"v2.46"}'
+        result = self.run_update('200', release)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('renderer build failed', result.stderr)
+        self.assertEqual(git('rev-parse', 'HEAD'), old)
+        self.assertFalse((self.home / 'restarted').exists())
+        (state / 'native-notifications-disabled').touch()
+        result = self.run_update('200', release)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(git('rev-parse', 'HEAD'), target)
+        self.assertTrue((self.home / 'restarted').exists())
+
+        # If the bundle builds but the renderer cannot resume, the release is
+        # rolled back and the previous shell is restarted.
+        (self.home / 'restarted').unlink()
+        (state / 'native-notifications-disabled').unlink()
+        preflight.write_text('#!/bin/bash\nmkdir -p "$1"\necho shell > "$1/shell.js"\necho css > "$1/shell.css"\n')
+        native = scripts / 'notifications'
+        native.write_text('#!/bin/bash\ntouch "$HOME/native-resume-attempted"\nexit 1\n')
+        native.chmod(0o755)
+        (self.repo / 'VERSION').write_text('2.47\n')
+        git('add', 'VERSION', 'scripts')
+        git('commit', '-qm', 'next release')
+        git('tag', 'v2.47')
+        git('push', str(remote), 'refs/tags/v2.47')
+        git('reset', '--hard', target)
+        result = self.run_update('200', '{"tag_name":"v2.47"}')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('rolling back the release', result.stdout)
+        self.assertEqual(git('rev-parse', 'HEAD'), target)
+        self.assertTrue((self.home / 'native-resume-attempted').exists())
+        self.assertTrue((self.home / 'restarted').exists())
 
 
 if __name__ == '__main__':

@@ -11,5 +11,13 @@ done
 mkdir -p "$OUT"
 "$AGS_BIN" bundle "$DIR/core.ts" "$OUT/shell.js" --gtk 3
 sassc "$DIR/components/style/cyber.scss" "$OUT/shell.css"
+if ! bash "$DIR/scripts/build-notification-preview" "$OUT/notification-renderer"; then
+    rm -f "$OUT/notification-renderer"
+    if [ "${NEUROS_REQUIRE_NOTIFICATION_RENDERER:-0}" = 1 ]; then
+        echo 'Required native notification renderer did not build' >&2
+        exit 1
+    fi
+    echo 'Native notification renderer unavailable; keeping the existing notification server' >&2
+fi
 # Runtime imports are not executed here: starting the GUI would acquire session services.
 [ -s "$OUT/shell.js" ] && [ -s "$OUT/shell.css" ]

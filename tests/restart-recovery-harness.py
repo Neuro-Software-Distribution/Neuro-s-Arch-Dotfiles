@@ -62,6 +62,37 @@ fi
     def test_success_promotes_only_ready_candidate(self):
         self.run_restart(0,GOOD_CANDIDATE='1')
         self.assertEqual((self.session/'healthy').resolve(),self.session/'candidate')
+    def test_success_prunes_unused_bundles_but_keeps_rollback(self):
+        stale = self.session/'build.stale'; stale.mkdir()
+        rollback = self.session/'build.rollback'; self.good.rename(rollback)
+        self.good = rollback
+        for name in ('current', 'healthy'):
+            (self.session/name).unlink()
+            (self.session/name).symlink_to(rollback)
+        self.live.write_text(str(rollback))
+        self.run_restart(0,GOOD_CANDIDATE='1')
+        self.assertFalse(stale.exists())
+        self.assertTrue(rollback.exists())
+        self.assertTrue((self.session/'candidate').exists())
+
+    def test_failed_candidate_does_not_prune_rollback_or_old_bundles(self):
+        stale = self.session/'build.stale'; stale.mkdir()
+        self.run_restart(1)
+        self.assertTrue(stale.exists())
+        self.assertTrue(self.good.exists())
+    def test_pruning_keeps_the_build_of_a_running_native_renderer(self):
+        native = self.session/'build.native'; native.mkdir()
+        binary = native/'notification-renderer'; shutil.copy2('/bin/sleep', binary)
+        process = subprocess.Popen([str(binary), '60'])
+        def stop():
+            if process.poll() is None: process.terminate()
+            process.wait(timeout=2)
+        self.addCleanup(stop)
+        (self.session/'notification-renderer.pid').write_text(str(process.pid))
+        stale = self.session/'build.stale'; stale.mkdir()
+        self.run_restart(0,GOOD_CANDIDATE='1')
+        self.assertTrue(binary.exists())
+        self.assertFalse(stale.exists())
     def test_actual_prepare_preserves_healthy_pointer(self):
         shutil.copy2(ROOT/'scripts/launch-theme',self.scripts/'launch-theme')
         self.exe(self.scripts/'preflight','mkdir -p "$1"; echo candidate > "$1/shell.js"; echo css > "$1/shell.css"')
@@ -70,5 +101,14 @@ fi
             self.assertEqual(p.returncode,0,p.stderr)
             self.assertEqual((self.session/'healthy').resolve(),self.good)
             self.assertNotEqual((self.session/'current').resolve(),self.good)
+
+    def test_failed_prepare_cleans_its_staging_directory(self):
+        shutil.copy2(ROOT/'scripts/launch-theme',self.scripts/'launch-theme')
+        self.exe(self.scripts/'preflight', 'echo partial > "$1/shell.js"; exit 73')
+        result = subprocess.run(['bash', str(self.scripts/'launch-theme'), '--prepare'],
+                                env=self.env, capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([p for p in self.session.glob('build.*') if p.is_dir()], [])
+        self.assertEqual((self.session/'current').resolve(), self.good)
 
 if __name__ == '__main__': unittest.main(verbosity=2)

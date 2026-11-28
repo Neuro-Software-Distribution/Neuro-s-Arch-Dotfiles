@@ -38,11 +38,33 @@ ready() {
     done
     return 1
 }
+# Remove unused generated bundles only after a verified handoff. Holding the
+# build lock prevents a concurrent prepare from publishing a candidate here.
+prune_builds() (
+    local native_build="" native_pid native_exe
+    exec 7>"$CYBER_RUNTIME/build.lock"
+    flock -w 5 7 || return 0
+    [ "$(readlink -f "$CYBER_RUNTIME/current" 2>/dev/null || true)" = "$expected" ] || return 0
+    [ "$(readlink -f "$CYBER_RUNTIME/healthy" 2>/dev/null || true)" = "$expected" ] || return 0
+    [ "$(timeout 2 astal -i cyberpunk health 2>/dev/null || true)" = "$expected" ] || return 0
+    if [ -r "$CYBER_RUNTIME/notification-renderer.pid" ]; then
+        read -r native_pid < "$CYBER_RUNTIME/notification-renderer.pid"
+        if [[ "$native_pid" =~ ^[0-9]+$ ]]; then
+            native_exe="$(readlink -f "/proc/$native_pid/exe" 2>/dev/null || true)"
+            case "$native_exe" in "$CYBER_RUNTIME"/build.*/notification-renderer) native_build="${native_exe%/*}" ;; esac
+        fi
+    fi
+    for build in "$CYBER_RUNTIME"/build.*; do
+        [ -d "$build" ] && [ ! -L "$build" ] || continue
+        [ "$build" = "$expected" ] || [ "$build" = "$rollback" ] || [ "$build" = "$native_build" ] || rm -rf -- "$build"
+    done
+)
 start
 if ready "$expected"; then
     pointer="$(mktemp -u "$CYBER_RUNTIME/healthy.XXXXXX")"
     ln -s "$expected" "$pointer"
     mv -Tf "$pointer" "$CYBER_RUNTIME/healthy"
+    prune_builds || echo 'Could not clean up old shell bundles' >&2
     exit 0
 fi
 echo 'Replacement shell did not become ready; restoring previous bundle.' >&2

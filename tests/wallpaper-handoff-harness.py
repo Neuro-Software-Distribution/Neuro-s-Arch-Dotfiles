@@ -30,8 +30,9 @@ class WallpaperHandoff(unittest.TestCase):
         self.video.write_bytes(b'not-a-real-video')
         self.bin = self.work / 'bin'
         self.bin.mkdir()
-        self.old_mpv = subprocess.Popen(['/bin/sleep', '60'])
-        self.old_awww = subprocess.Popen(['/bin/sleep', '60'])
+        session_env = dict(os.environ, WAYLAND_DISPLAY='wayland-1')
+        self.old_mpv = subprocess.Popen(['/bin/sleep', '60'], env=session_env)
+        self.old_awww = subprocess.Popen(['/bin/sleep', '60'], env=session_env)
         self.addCleanup(self.stop, self.old_mpv)
         self.addCleanup(self.stop, self.old_awww)
         self.stub('wlr-randr', 'exit 0')
@@ -78,7 +79,7 @@ class WallpaperHandoff(unittest.TestCase):
             env = dict(os.environ, HOME=str(self.home), XDG_RUNTIME_DIR=str(self.runtime),
                        HYPRLAND_INSTANCE_SIGNATURE='a' * 70,
                        WAYLAND_DISPLAY='wayland-1', PATH=str(self.bin) + ':' + os.environ['PATH'],
-                       CYBER_SDDM_CURRENT_DIR=str(self.work / 'not-installed'),
+                       CYBER_SDDM_CURRENT_DIR=str(self.work / 'greeter'),
                        OLD_MPV_PID=str(self.old_mpv.pid), OLD_AWWW_PID=str(self.old_awww.pid),
                        TEST_READY='1' if ready else '0')
             return subprocess.run(['bash', str(self.scripts / 'set-wallpaper'), str(self.video)],
@@ -102,6 +103,50 @@ class WallpaperHandoff(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.old_mpv.wait(timeout=1)
         self.old_awww.wait(timeout=1)
+
+    def test_failed_renderer_preserves_greeter_wallpaper(self):
+        greeter = self.work / 'greeter'
+        greeter.mkdir()
+        old = greeter / 'image.png'
+        old.write_bytes(b'previous')
+        self.assertEqual(self.run_wallpaper(False).returncode, 1)
+        self.assertEqual(old.read_bytes(), b'previous')
+        self.assertEqual(list(greeter.iterdir()), [old])
+
+    def test_failed_greeter_copy_preserves_previous_wallpaper(self):
+        greeter = self.work / 'greeter'
+        greeter.mkdir()
+        old = greeter / 'image.png'
+        old.write_bytes(b'previous')
+        self.stub('cp', 'printf partial > "$3"; exit 1')
+        result = self.run_wallpaper(True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(old.read_bytes(), b'previous')
+        self.assertEqual(list(greeter.iterdir()), [old])
+
+    def test_successful_handoff_replaces_greeter_wallpaper(self):
+        greeter = self.work / 'greeter'
+        greeter.mkdir()
+        (greeter / 'image.png').write_bytes(b'previous')
+        self.assertEqual(self.run_wallpaper(True).returncode, 0)
+        self.assertEqual((greeter / 'video.mp4').read_bytes(), self.video.read_bytes())
+        self.assertEqual([p.name for p in greeter.iterdir()], ['video.mp4'])
+
+    def test_other_wayland_session_renderers_are_not_stopped(self):
+        other = subprocess.Popen(['/bin/sleep', '60'], env=dict(os.environ, WAYLAND_DISPLAY='wayland-2'))
+        self.addCleanup(self.stop, other)
+        self.stub('pgrep', '''
+            case "$*" in
+                *'mpvpaper'*) printf '%s\\n' "$OLD_MPV_PID" "$OTHER_PID" ;;
+                *'awww-daemon'*) printf '%s\\n' "$OLD_AWWW_PID" ;;
+            esac
+        ''')
+        old_env = os.environ.get('OTHER_PID')
+        os.environ['OTHER_PID'] = str(other.pid)
+        self.addCleanup(lambda: os.environ.pop('OTHER_PID', None) if old_env is None else os.environ.__setitem__('OTHER_PID', old_env))
+        self.assertEqual(self.run_wallpaper(True).returncode, 0)
+        self.old_mpv.wait(timeout=1)
+        self.assertIsNone(other.poll())
 
 
 if __name__ == '__main__':

@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Select native notifications for new installations only after a successful build.
+set -euo pipefail
+DIR="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/cyberarch"
+ENABLED="$STATE/native-notifications-enabled"
+DISABLED="$STATE/native-notifications-disabled"
+mkdir -p "$STATE"
+exec 9>"$STATE/.notification-setup.lock"
+flock -w 30 9 || { echo 'Notification setup is busy.' >&2; exit 1; }
+if [ -f "$DISABLED" ]; then
+    echo 'Native notifications remain disabled by your preference.'
+    exit 0
+fi
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+if ! bash "$DIR/build-notification-preview" "$stage/notification-renderer"; then
+    echo 'Native notification renderer did not build; the existing notification service is unchanged.' >&2
+    exit 1
+fi
+[ -x "$stage/notification-renderer" ] || { echo 'Native notification renderer was not produced.' >&2; exit 1; }
+if [ -f "$ENABLED" ]; then
+    echo 'Native notification selection and build verified.'
+    exit 0
+fi
+touch "$ENABLED"
+echo 'Native notifications selected; activation will be attempted when the NeurOS shell starts.'

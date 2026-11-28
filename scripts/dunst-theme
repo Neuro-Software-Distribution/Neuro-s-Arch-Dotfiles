@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+# Install a managed Dunst drop-in without replacing the user's base config.
+set -euo pipefail
+
+accent="${1:?usage: dunst-theme ACCENT SECONDARY FOREGROUND BACKGROUND}"
+secondary="${2:?usage: dunst-theme ACCENT SECONDARY FOREGROUND BACKGROUND}"
+foreground="${3:?usage: dunst-theme ACCENT SECONDARY FOREGROUND BACKGROUND}"
+background="${4:?usage: dunst-theme ACCENT SECONDARY FOREGROUND BACKGROUND}"
+for color in "$accent" "$secondary" "$foreground" "$background"; do
+    [[ "$color" =~ ^#[0-9a-fA-F]{6}$ ]] || { echo 'Invalid Dunst palette color' >&2; exit 1; }
+done
+
+dir="${XDG_CONFIG_HOME:-$HOME/.config}/dunst"
+dropin="$dir/dunstrc.d/80-neuros.conf"
+marker='# Managed by NeurOS; generated from the selected palette.'
+mkdir -p "$dir/dunstrc.d"
+# Dunst only reads drop-ins from the directory containing its base config.
+# Seed a new user base from the system config, preserving its existing rules.
+if [ ! -e "$dir/dunstrc" ] && [ ! -L "$dir/dunstrc" ]; then
+    if [ -r /etc/dunst/dunstrc ]; then
+        ( set -o noclobber; cat /etc/dunst/dunstrc > "$dir/dunstrc" ) || true
+    else
+        ( set -o noclobber; printf '%s\n' '# Local Dunst settings may be added here.' > "$dir/dunstrc" ) || true
+    fi
+fi
+# Upgrade the empty base created by earlier NeurOS builds, but never replace a
+# base that contains user settings or follows a symlink.
+if [ ! -L "$dir/dunstrc" ] && [ -r /etc/dunst/dunstrc ] \
+   && cmp -s "$dir/dunstrc" <(printf '%s\n' '# Local Dunst settings may be added here.'); then
+    cp /etc/dunst/dunstrc "$dir/dunstrc"
+fi
+if [ -e "$dropin" ] || [ -L "$dropin" ]; then
+    if [ -L "$dropin" ] || ! grep -Fxq "$marker" "$dropin"; then
+        echo "Leaving existing Dunst configuration untouched: $dropin" >&2
+        exit 1
+    fi
+fi
+stage="$(mktemp "$dir/dunstrc.d/.neuros.XXXXXX")"
+trap 'rm -f "$stage"' EXIT
+cat > "$stage" <<EOF
+$marker
+[global]
+    follow = mouse
+    origin = top-right
+    offset = (24, 64)
+    width = 360
+    height = (0, 180)
+    notification_limit = 4
+    frame_width = 2
+    frame_color = "$accent"
+    separator_color = frame
+    gap_size = 8
+    corner_radius = 0
+    padding = 14
+    horizontal_padding = 16
+    text_icon_padding = 14
+    font = Rajdhani Medium 11
+    line_height = 3
+    format = "<span foreground='$accent' size='small' weight='bold'>◢  </span><span foreground='$secondary' size='small' weight='bold'>NEUROS  //  %a</span><span foreground='$accent' size='small'>  ╱╱</span>\\n<b>%s</b>\\n%b"
+    alignment = left
+    vertical_alignment = center
+    word_wrap = yes
+    ellipsize = end
+    icon_position = left
+    min_icon_size = 32
+    max_icon_size = 64
+    progress_bar = true
+    progress_bar_height = 6
+    progress_bar_frame_width = 1
+    progress_bar_corner_radius = 0
+
+[urgency_low]
+    background = "$background"
+    foreground = "$foreground"
+    frame_color = "$accent"
+    highlight = "$secondary"
+
+[urgency_normal]
+    background = "$background"
+    foreground = "$foreground"
+    frame_color = "$accent"
+    highlight = "$secondary"
+
+[urgency_critical]
+    background = "$background"
+    foreground = "$foreground"
+    frame_color = "#ff4a55"
+    highlight = "#ff4a55"
+EOF
+chmod 644 "$stage"
+mv -f -- "$stage" "$dropin"
+
+# Do not auto-activate Dunst or interfere with another notification server.
+if command -v busctl >/dev/null && command -v dunstctl >/dev/null \
+   && busctl --user status org.freedesktop.Notifications 2>/dev/null | grep -q '^Comm=dunst$'; then
+    # A plain reload only re-reads files known at daemon startup, so a newly
+    # created drop-in would otherwise be ignored until the next restart.
+    dunstctl reload "$dir/dunstrc" "$dir"/dunstrc.d/*.conf >/dev/null 2>&1 \
+        || echo 'Dunst will use the new theme after it restarts.' >&2
+fi

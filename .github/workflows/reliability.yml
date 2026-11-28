@@ -20,9 +20,14 @@ jobs:
       - run: python3 tests/restart-recovery-harness.py
       - run: python3 tests/theme-startup-harness.py
       - run: python3 tests/theme-config-harness.py
+      - run: python3 tests/dunst-theme-harness.py
+      - run: python3 tests/notification-manager-harness.py
+      - run: python3 tests/notification-setup-harness.py
+      - run: python3 tests/preflight-notifications-harness.py
       - run: python3 tests/terminal-migration-harness.py
       - run: python3 tests/wallpaper-handoff-harness.py
       - run: python3 tests/updater-release-harness.py
+      - run: lua tests/tray-keybinds-harness.lua
       - run: node --test tests/*.test.mjs
 
   native-preflight:
@@ -37,7 +42,7 @@ jobs:
             --volume "$GITHUB_WORKSPACE:/source:ro" \
             archlinux:base-devel \
             bash -euo pipefail -c '
-              pacman -Syu --noconfirm --needed git sudo gjs hyprland python sassc
+              pacman -Syu --noconfirm --needed git sudo gjs hyprland python sassc gtk3 gtk-layer-shell
               useradd --create-home builder
               printf "builder ALL=(ALL) NOPASSWD: ALL\\n" > /etc/sudoers.d/builder
               install -d -o builder -g builder /work
@@ -54,6 +59,7 @@ jobs:
                 ln -sfn /usr/share/ags/js/node_modules/gnim node_modules/gnim
                 stage=\$(mktemp -d)
                 trap '\''rm -rf \"\$stage\"'\'' EXIT
-                ./scripts/preflight \"\$stage\"
+                NEUROS_REQUIRE_NOTIFICATION_RENDERER=1 ./scripts/preflight \"\$stage\"
+                python3 tests/notification-preview-harness.py
               "
             '

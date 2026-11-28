@@ -18,6 +18,39 @@ class ThemeStartup(unittest.TestCase):
     def test_unready_live_shell_is_terminated_and_retried(self):
         self.run_supervisor(True)
 
+    def test_native_notifications_resume_only_when_selected(self):
+        for selected, disabled in ((True, False), (False, False), (True, True)):
+            with self.subTest(selected=selected, disabled=disabled), tempfile.TemporaryDirectory() as temp:
+                work = Path(temp)
+                scripts = work / 'theme/scripts'; scripts.mkdir(parents=True)
+                for name in ('launch-theme', 'runtime.sh'):
+                    shutil.copy2(ROOT / 'scripts' / name, scripts / name)
+                runtime = work / 'runtime'
+                build = runtime / 'cyberarch-test/build'; build.mkdir(parents=True)
+                (build.parent / 'current').symlink_to(build)
+                marker, started = work / 'resumed', work / 'started'
+                (build / 'shell.js').write_text('#!/bin/bash\necho yes > "$STARTED"\n/usr/bin/sleep 0.3\nexit 1\n')
+                notification = scripts / 'notifications'
+                notification.write_text('#!/bin/bash\necho "$1" >> "$MARKER"\n')
+                notification.chmod(0o755)
+                fake = work / 'bin'; fake.mkdir()
+                for name, code in [('astal', '[ -f "$STARTED" ] && printf "%s" "$BUILD"'),
+                                   ('sleep', '/usr/bin/sleep 0.01')]:
+                    path = fake / name; path.write_text('#!/bin/sh\n' + code + '\n'); path.chmod(0o755)
+                state = work / 'state/cyberarch'; state.mkdir(parents=True)
+                if selected: (state / 'native-notifications-enabled').touch()
+                if disabled: (state / 'native-notifications-disabled').touch()
+                env = dict(os.environ, HOME=temp, XDG_RUNTIME_DIR=str(runtime), XDG_STATE_HOME=str(work / 'state'),
+                           HYPRLAND_INSTANCE_SIGNATURE='test', WAYLAND_DISPLAY='wayland-test', AGS_BIN='/bin/true',
+                           MARKER=str(marker), STARTED=str(started), BUILD=str(build), PATH=str(fake) + ':' + os.environ['PATH'])
+                with socket.socket(socket.AF_UNIX) as display:
+                    display.bind(str(runtime / 'wayland-test'))
+                    result = subprocess.run(['bash', str(scripts / 'launch-theme')], env=env,
+                                            capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(marker.exists(), selected and not disabled)
+                if marker.exists(): self.assertEqual(set(marker.read_text().splitlines()), {'resume'})
+
     def run_supervisor(self, hangs):
         with tempfile.TemporaryDirectory() as temp:
             work = Path(temp)

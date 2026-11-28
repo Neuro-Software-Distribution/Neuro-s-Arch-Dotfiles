@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+output="${1:?usage: build-notification-preview OUTPUT}"
+pkg-config --exists gtk+-3.0 gtk-layer-shell-0 astal-notifd-0.1 || {
+    echo 'GTK 3, gtk-layer-shell and AstalNotifd development packages are required.' >&2
+    exit 1
+}
+cc -std=c11 -O2 -Wall -Wextra -Werror \
+    $(pkg-config --cflags gtk+-3.0 gtk-layer-shell-0 astal-notifd-0.1) \
+    "$root/components/notifications/preview.c" -o "$output" \
+    $(pkg-config --libs gtk+-3.0 gtk-layer-shell-0 astal-notifd-0.1) -lm

@@ -85,7 +85,7 @@ local_ver() {
 }
 remote_tag() { jq -r --arg repo "$REPO" 'select(._cyberarch_repo == $repo) | .tag_name // empty' "$CACHE" 2>/dev/null; }
 fetch_release() {
-    local response status curl_status
+    local response status curl_status cache_stage
     [ -n "$REPO" ] || { err "Origin must be a supported GitHub URL." >&2; return 1; }
     command -v curl >/dev/null 2>&1 || { err "curl is required for release lookup." >&2; return 1; }
     command -v jq >/dev/null 2>&1 || { err "jq is required for release lookup." >&2; return 1; }
@@ -111,11 +111,16 @@ fetch_release() {
         err "GitHub returned an invalid release response." >&2
         return 1
     fi
-    mkdir -p "$USER_DIR"
-    jq --arg repo "$REPO" '. + {_cyberarch_repo: $repo}' "$response" > "$CACHE"
-    local result=$?
+    if ! mkdir -p "$USER_DIR" || ! cache_stage="$(mktemp "$USER_DIR/.update.json.XXXXXX")"; then
+        rm -f "$response"
+        return 1
+    fi
+    if ! jq --arg repo "$REPO" '. + {_cyberarch_repo: $repo}' "$response" > "$cache_stage" || ! mv -f "$cache_stage" "$CACHE"; then
+        rm -f "$response" "$cache_stage"
+        return 1
+    fi
     rm -f "$response"
-    return "$result"
+    return 0
 }
 
 cmd_check() {    lv="$(local_ver)"
@@ -136,9 +141,9 @@ cmd_check() {    lv="$(local_ver)"
 cmd_spawn() {
 
 
-    run="'$THEME/updater.sh'; ec=\$?; echo; printf '\033[1;36m>> update finished (exit %s). press ENTER to close.\033[0m ' \"\$ec\"; read _"
+    run='"$1"; ec=$?; echo; printf "\033[1;36m>> update finished (exit %s). press ENTER to close.\033[0m " "$ec"; read _'
     command -v kitty >/dev/null 2>&1 || { notify-send "CyberArch update" "Kitty is required" 2>/dev/null; return 1; }
-    setsid kitty --title "CYBERARCH UPDATE" sh -c "$run" >/dev/null 2>&1 &
+    setsid kitty --title "CYBERARCH UPDATE" sh -c "$run" sh "$THEME/updater.sh" >/dev/null 2>&1 &
 
 }
 
@@ -197,11 +202,21 @@ cmd_apply() (
     git worktree add --detach "$stage/tree" "$target"
     # System Astal module links are shared read-only for compilation.
     [ ! -d "$THEME/node_modules" ] || ln -s "$THEME/node_modules" "$stage/tree/node_modules"
-    "$stage/tree/scripts/preflight" "$stage/build"
+    notification_state="${XDG_STATE_HOME:-$HOME/.local/state}/cyberarch"
+    if [ -f "$notification_state/native-notifications-enabled" ] && [ ! -f "$notification_state/native-notifications-disabled" ]; then
+        NEUROS_REQUIRE_NOTIFICATION_RENDERER=1 "$stage/tree/scripts/preflight" "$stage/build"
+    else
+        "$stage/tree/scripts/preflight" "$stage/build"
+    fi
     [ -z "$(git status --porcelain --untracked-files=all)" ] || { err "Checkout changed during preflight"; exit 1; }
     git merge --ff-only "$target"
     activated=true
     "$THEME/scripts/restart"
+    if [ -f "$notification_state/native-notifications-enabled" ] && [ ! -f "$notification_state/native-notifications-disabled" ]; then
+        bash "$THEME/scripts/notifications" resume || {
+            err "Native notification renderer did not become ready; rolling back the release."; exit 1;
+        }
+    fi
     # Readiness is checked synchronously by restart. Publish commit last.
     printf '%s\n' "$rv" > "$APPLIED.new"
     printf '%s\n' "$target" > "$APPLIED_COMMIT.new"

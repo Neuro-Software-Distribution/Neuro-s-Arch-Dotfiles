@@ -14,11 +14,12 @@ prepare() (
     flock -w 45 7 || return 1
     staged="$(mktemp -d "$CYBER_RUNTIME/build.XXXXXX")"
     pointer="$(mktemp -u "$CYBER_RUNTIME/current.XXXXXX")"
-    trap 'rm -f "$pointer"' EXIT
-    if ! "$THEME_DIR/scripts/preflight" "$staged"; then rm -rf "$staged"; return 1; fi
+    trap 'rm -f "$pointer"; [ -z "$staged" ] || rm -rf "$staged"' EXIT
+    "$THEME_DIR/scripts/preflight" "$staged" || return 1
     # Building a candidate never overwrites the last readiness-verified build.
     ln -s "$staged" "$pointer"
     mv -Tf "$pointer" "$CYBER_RUNTIME/current"
+    staged=""
 )
 
 if [ "${1:-}" = --check ]; then
@@ -59,6 +60,9 @@ while [ "$failures" -lt 5 ]; do
             pointer="$(mktemp -u "$CYBER_RUNTIME/healthy.XXXXXX")"
             ln -s "$build" "$pointer"
             mv -Tf "$pointer" "$CYBER_RUNTIME/healthy"
+            if [ -f "$STATE/native-notifications-enabled" ] && [ ! -f "$STATE/native-notifications-disabled" ]; then
+                setsid bash "$THEME_DIR/scripts/notifications" resume 8>&- >"$STATE/notification-startup.log" 2>&1 </dev/null &
+            fi
             break
         fi
         sleep 0.25

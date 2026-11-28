@@ -2,6 +2,7 @@ import { Window, DrawingArea, activeMonitor } from "./widget.ts"
 import { Anchor, Layer, Exclusivity } from "./widget.ts"
 import { interval, timeout, execAsync } from "astal"
 import AstalNotifd from "gi://AstalNotifd"
+import Gio from "gi://Gio"
 import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
 import { TITLE, MONO, NAVINE, NEUE, ORBITRON } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
@@ -48,6 +49,7 @@ const CX = 68, FW = 400, BASEV = 74, FH = 43, STEP = 55
 let msgs: any[] = []
 let intro = 0, closing = false, lastActivity = 0, holdUntil = 0
 let area: any = null, loop: any = null, win: any = null
+let nativeRendererActive = false
 
 const projPath = (ctx: any, pts: [number, number][]) => { ctx.newPath(); pts.forEach(([u, v], i) => { const [x, y] = plane.project(u, v); i ? ctx.lineTo(x, y) : ctx.moveTo(x, y) }); ctx.closePath() }
 const drawIcon = (ctx: any, surf: any, u: number, v: number, targetW: number, a: number, glow = false, glitch = 0, tint: [number, number, number] | null = null) => {
@@ -271,6 +273,10 @@ export const notifDismiss = () => {
 }
 
 const add = (n: any) => {
+    if (n?.app_name === "NeurOS internal readiness") return
+    // The native renderer announces itself only while it is available. If it
+    // exits, this existing popup resumes without restarting the shell.
+    if (nativeRendererActive) return
     const appName = (n?.app_name || "").toString().trim()
     const summary = (n?.summary || "").toString().trim()
     const body = (n?.body || "").toString().replace(/\s+/g, " ").trim()
@@ -300,6 +306,8 @@ const add = (n: any) => {
 }
 
 export const NotifPopupWindow = () => {
+    Gio.bus_watch_name(Gio.BusType.SESSION, "io.neuros.NotificationRenderer", Gio.BusNameWatcherFlags.NONE,
+        () => { nativeRendererActive = true }, () => { nativeRendererActive = false })
     area = DrawingArea({}); area.set_size_request(Math.round((MARGIN_L + plane.width + 20) * SCALE), Math.round((MARGIN_T + plane.height + 20) * SCALE))
     onColorChange(() => area.queue_draw())
     area.connect("draw", (_w: any, ctx: any) => { ctx.scale(winScale(win), winScale(win)); draw(ctx); return false })

@@ -68,6 +68,20 @@ WRN_H=$(hex ${W[0]} ${W[1]} ${W[2]})
 ACC_R=$(raw ${A[0]} ${A[1]} ${A[2]})
 AC2_R=$(raw ${A2[0]} ${A2[1]} ${A2[2]})
 
+cat > "$STAGE/notification.palette" <<EOF
+[palette]
+accent=$ACC_H
+secondary=$SEC_H
+foreground=$TXT_H
+background=$(toneh 0)
+EOF
+mv -f "$STAGE/notification.palette" "$USR/notification.palette"
+
+if command -v dunst >/dev/null 2>&1; then
+    bash "$AUG/scripts/dunst-theme" "$ACC_H" "$SEC_H" "$TXT_H" "$(toneh 0)" \
+        || echo 'Could not apply the NeurOS Dunst theme' >&2
+fi
+
 mkdir -p "$USR"
 
 if [ -f "$GTK/gtk.css" ]; then

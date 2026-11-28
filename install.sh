@@ -279,7 +279,7 @@ HYP_PKGS="hyprland hyprgraphics hyprland-guiutils hyprlock hyprtoolkit hyprwire 
 REPO=(
   gjs grim wf-recorder wl-clipboard networkmanager bluez-utils curl
   wireplumber playerctl brightnessctl power-profiles-daemon upower
-  hypridle socat jq rofi libnotify sassc kitty kvantum kvantum-qt5 wget pacman-contrib awww cronie dolphin
+  hypridle socat jq rofi libnotify sassc kitty kvantum kvantum-qt5 wget pacman-contrib awww cronie dolphin gtk3 gtk-layer-shell
    libcdio libcdio-paranoia
   base-devel pkgconf cmake cpio gcc lib32-libelf lib32-glibc glibc
   python python-pillow imagemagick $MESA_PKGS
@@ -436,6 +436,14 @@ else
     "24 modules under components/ import astal directly; nothing will start." \
     "Looked in: /usr/share/astal/gjs, /usr/share/astal-io/gjs, /usr/lib/astal/gjs" \
     "Install:  paru -S libastal-gjs-git libastal-notifd-git libastal-wireplumber-git libastal-mpris-git"
+fi
+
+hdr "NATIVE NOTIFICATIONS"
+if notification_setup="$(bash "$THEME/scripts/install-notifications")"; then
+  ok "$notification_setup"
+else
+  warn "Native notification setup failed; the current notification service remains available."
+  warn "Install GTK 3, gtk-layer-shell, pkgconf, a C compiler, and libastal-notifd-git; then rerun the installer."
 fi
 
 hdr "UI FONTS"
