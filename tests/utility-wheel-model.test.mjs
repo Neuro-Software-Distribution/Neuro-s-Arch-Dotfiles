@@ -45,5 +45,5 @@ test('the beta route and configurable keybind stay registered together', () => {
     assert.match(core, /request === "utility-wheel"/)
     assert.match(core, /UtilityWheelWindow\(\)/)
     assert.match(binds, /id="hud\.utilitywheel"[\s\S]*sock\("utility-wheel"\)/)
-    assert.match(registry, /id: "hud\.utilitywheel"[\s\S]*mod: "SUPER \+ CTRL"[\s\S]*key: "space"/)
+    assert.match(registry, /id: "hud\.utilitywheel"[\s\S]*mod: "SUPER"[\s\S]*key: "space"/)
 })

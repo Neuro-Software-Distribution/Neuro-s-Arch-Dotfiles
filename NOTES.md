@@ -16,7 +16,7 @@ notes. Implementation status describes the checkout, not a confirmed live sessio
 - The three independently configurable trays, shared attention effects, upper-right
   messages panel and prototype design studies are in source. The redesign remains
   incomplete: inherited controls and expanded views still need a coherent treatment.
-- The beta utility wheel is implemented at `Super + Ctrl + Space` (IPC
+- The beta utility wheel is implemented at `Super + Space` (IPC
   `utility-wheel`). Six point-top slots launch terminal, forecast, apps, audio,
   system and player through fixed seed actions. Q/W/E/A/S/D, pointer, Tab,
   Enter and Escape are supported. It is not yet a configurable scratchpad system.

@@ -10,7 +10,7 @@ test('dialog hover/focus drives its frame and entrance paints the final frame', 
     const drawingContext = new Proxy({}, { get: () => noop })
     const widget = props => ({
         ...props, signals: {}, redraws: 0, is_active: false,
-        connect(s, cb) { this.signals[s] = cb }, add_events: noop, set_size_request: noop,
+        connect(s, cb) { this.signals[s] = cb }, add_events: noop, set_size_request(w, h) { this.size = [w, h] },
         queue_draw() { this.redraws++ }, get_mapped: () => true,
         add_tick_callback(cb) { const id = next++; ticks.set(id, cb); return id }, remove_tick_callback: id => ticks.delete(id),
     })
@@ -63,4 +63,18 @@ test('dialog hover/focus drives its frame and entrance paints the final frame', 
     assert.equal(frameAttention.value, 0); assert.equal(ticks.size, 0)
     win.signals.destroy()
     assert.equal(timers.size, 0); assert.equal(listeners.size, 0); assert.equal(colorListeners.size, 0)
+
+    let clicked = false
+    const scaled = context.create({ name: 'scaled', W: 400, H: 200, tabTitle: 'Scaled', visualScale: 0.9,
+        noGlass: true, draw: (_ctx, g) => g.push({ bx0: 95, by0: 45, bx1: 105, by1: 55, on: () => { clicked = true } }) })
+    const scaledArea = scaled.win.child.child
+    const monitor = { name: 'target display' }
+    scaled.open(monitor)
+    assert.equal(scaled.win.gdkmonitor, monitor, 'explicit target reaches the actual window')
+    assert.deepEqual(scaledArea.size, [360, 180])
+    for (let i = 0; i < 5; i++) [...timers].find(t => t.ms === 60).cb()
+    scaledArea.signals.draw(scaledArea, drawingContext)
+    scaled.win.child.signals['button-press-event'](scaled.win.child, { x: 90, y: 45, button: 1 })
+    assert.equal(clicked, true, 'pointer coordinates are mapped back to logical geometry')
+    scaled.win.signals.destroy()
 })

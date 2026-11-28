@@ -251,8 +251,8 @@ their compact widgets and expanded views are hidden.
 | `SUPER + ALT + C` | Toggle controls tray |
 | `SUPER + ALT + W` | Toggle weather / markets tray |
 | `SUPER + ALT + S` | Toggle CPU / RAM tray |
-| `SUPER + CTRL + Space` | Utility wheel beta — Q/W/E/A/S/D select, `Esc` cancels |
-| `SUPER` / `SUPER + Space` | App launcher |
+| `SUPER + Space` | Utility wheel beta — Q/W/E/A/S/D select, `Esc` cancels |
+| `SUPER + Tab` | App launcher |
 | `SUPER + SHIFT + Z` | Toggle HUD above / below windows |
 | `SUPER + ALT + H` | Hide / show all desktop widgets together (saved across restarts) |
 | `SUPER + SHIFT + V` | Volume & Microphone modal |

@@ -14,7 +14,7 @@ typography and controllable neon, without reproducing a game HUD.
   secondary-color attention on selected surfaces, a design-study overlay, the
   upper-right messages panel, and the six-action utility wheel beta. Weather and
   financial markets remain available; NNET is a future replacement.
-- **Wheel:** `Super + Ctrl + Space` opens the fixed-action beta. Decide whether
+- **Wheel:** `Super + Space` opens the fixed-action beta. Decide whether
   its geometry and trigger work in use before adding configurable assignments or
   actual scratchpad management; validate keyboard focus and monitor behavior.
 - **Visual language:** agree on surface hierarchy, geometry, typography, semantic

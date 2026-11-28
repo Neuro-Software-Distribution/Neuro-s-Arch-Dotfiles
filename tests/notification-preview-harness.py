@@ -76,6 +76,13 @@ class Preview(unittest.TestCase):
         self.assertEqual(rows[-1][3], 0)
         self.assertGreater(rows[height // 2][width // 2 * 4 + 3], 200)
 
+    def test_notify_send_uses_intercom_label_without_renaming_other_apps(self):
+        _, _, generic = self.render('--app', 'notify-send')
+        _, _, intercom = self.render('--app', 'Intercom')
+        _, _, other = self.render('--app', 'Browser')
+        self.assertEqual(generic, intercom)
+        self.assertNotEqual(generic, other)
+
     def test_long_text_is_bounded_and_bad_image_falls_back(self):
         width, height, _ = self.render('--title', 'Long title ' * 200, '--body', 'Long body ' * 500,
                                        '--image', str(self.root / 'missing.png'))

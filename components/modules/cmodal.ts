@@ -1,7 +1,7 @@
 import { RUNTIME_DIR } from "../../env.ts"
 
 
-import { Window, DrawingArea, EventBox, activeMonitor } from "./widget.ts"
+import { Window, DrawingArea, EventBox, activeMonitor, monitorAtPoint } from "./widget.ts"
 import { Layer, Exclusivity, Keymode } from "./widget.ts"
 
 const SS_DEFAULT = 1
@@ -190,6 +190,8 @@ export const createModal = (spec) => {
     let animT: any = null, pollT: any = null, lastFrame = 0
     let hitRegions: any[] = [], drag: any = null, hoverKey: any = null, pressKey: any = null, dragKey: any = null, lastXY: any = null
     const ctrl: any = { name }
+    const visualScale = spec.visualScale ?? 1
+    const modalScale = () => winScale(win) * visualScale
     let attention: ReturnType<typeof createAttention> | null = null
     const controlAttention = new Map<string, ReturnType<typeof createAttention>>()
     const attentionFor = (key: string, selected: boolean) => {
@@ -219,7 +221,7 @@ export const createModal = (spec) => {
         HUDC = null; setTxtFX(false)
     }
     const draw = (screenCtx) => {
-        const S = winScale(win)
+        const S = modalScale()
         screenCtx.scale(S, S)
         screenCtx.setOperator(0); screenCtx.paint(); screenCtx.setOperator(2)
         if (intro <= 0.002 && !visible) return
@@ -247,7 +249,7 @@ export const createModal = (spec) => {
     const shapeInput = () => {
         try {
             const gw = win?.get_window?.(); if (!gw) return
-            const S = winScale(win)
+            const S = modalScale()
             const reg = new Cairo.Region()
             if (visible) {
                 const steps = 56
@@ -265,14 +267,14 @@ export const createModal = (spec) => {
             gw.input_shape_combine_region(reg, 0, 0)
         } catch (e) { print("[cyber] modal input shape:", e) }
     }
-    ctrl.open = () => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = activeMonitor() } catch {}; try { const S = winScale(win); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S)); const MW = monW(win); if (spec.anchorRight) win.set_margin_right?.(Math.round(MW * 0.25)); else if (spec.anchorLeft) win.set_margin_left?.(spec.marginLeft ?? Math.round(MW * 0.03)) } catch {}; spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
+    ctrl.open = (targetMonitor = null) => { if (visible) return; visible = true; introTarget = 1; if (!animOn("animModal")) intro = 1; try { win.gdkmonitor = targetMonitor || activeMonitor() } catch {}; try { const S = modalScale(); area.set_size_request(Math.round(plane.width * S), Math.round(plane.height * S)); const MW = monW(win); if (spec.anchorRight) win.set_margin_right?.(Math.round(MW * 0.25)); else if (spec.anchorLeft) win.set_margin_left?.(spec.marginLeft ?? Math.round(MW * 0.03)) } catch {}; spec.onOpen?.(); win.visible = true; try { win.present?.() } catch {} startTimers(); area && area.queue_draw(); timeout(40, shapeInput); fireChange() }
     ctrl.close = () => { if (!visible && introTarget === 0) return; visible = false; introTarget = 0; if (!animOn("animModal")) intro = 0; shapeInput(); spec.onClose?.(); fireChange(); startTimers() }
-    ctrl.toggle = () => visible ? ctrl.close() : ctrl.open()
+    ctrl.toggle = (targetMonitor = null) => visible ? ctrl.close() : ctrl.open(targetMonitor)
     ctrl.isOpen = () => visible
     ctrl.requestDraw = () => area && area.queue_draw()
     ctrl.hitRegions = () => hitRegions
 
-    area = DrawingArea({}); area.set_size_request(Math.round(plane.width * SCALE), Math.round(plane.height * SCALE))
+    area = DrawingArea({}); area.set_size_request(Math.round(plane.width * SCALE * visualScale), Math.round(plane.height * SCALE * visualScale))
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
     const offColor = onColorChange(() => { surf = null; ctrl.requestDraw() })
     if (!spec.hud && (!spec.noGlass || spec.attention)) attention = createAttention(area)
@@ -281,7 +283,7 @@ export const createModal = (spec) => {
     const evt = EventBox({ child: area })
     try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK | Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
     const wbtn = (e) => { try { return e.get_button?.()[1] ?? e.button } catch { return 1 } }
-    const xy = (e) => { try { const c = e.get_coords?.(); if (c && c.length >= 3) return [c[1] / winScale(win), c[2] / winScale(win)] } catch {} try { const x = e.x, y = e.y; if (x != null && y != null) return [x / winScale(win), y / winScale(win)] } catch {} return [0, 0] }
+    const xy = (e) => { try { const c = e.get_coords?.(); if (c && c.length >= 3) return [c[1] / modalScale(), c[2] / modalScale()] } catch {} try { const x = e.x, y = e.y; if (x != null && y != null) return [x / modalScale(), y / modalScale()] } catch {} return [0, 0] }
     const localPoint = (e) => { const [x, y] = xy(e); return unwarpRevealPoint(x, y, plane, W, H, intro, seed) }
     const contains = (r, x, y) => x >= Math.min(r.bx0, r.bx1) && x <= Math.max(r.bx0, r.bx1) && y >= Math.min(r.by0, r.by1) && y <= Math.max(r.by0, r.by1)
     const sliderParam = (r, x, y) => {
@@ -1428,7 +1430,7 @@ fi`).then(() => timeout(200, fetchInitApps))
     const select = (p) => { st.sel = p.pid; st.selProc = p; st.scroll = 0; ctrl.requestDraw() }
     const killSel = () => { if (st.sel) sh(`kill -9 ${st.sel} 2>/dev/null`).then(() => { st.sel = ""; st.selProc = null; timeout(400, refresh) }) }
     ctrl = createModal({
-        name: "sys", tabTitle: "SYSTEM MONITOR", W: SW, H: SH, noGlass: true, pad: 0,
+        name: "sys", tabTitle: "SYSTEM MONITOR", W: SW, H: SH, noGlass: true, pad: 0, visualScale: 0.9,
         onOpen: () => {
             st.sel = ""; st.selProc = null; st.scroll = 0; st.cpuHist = []; st.ramHist = []
             st.upHist = []; st.downHist = []; st.prevCpu = null; st.prevNet = null
@@ -1479,11 +1481,17 @@ fi`).then(() => timeout(200, fetchInitApps))
 
             // A quiet, opaque console surface keeps real data legible over any wallpaper.
             ctx.setSourceRGBA(0.015, 0.018, 0.035, 0.70); ctx.rectangle(0, 0, SW, SH); ctx.fill()
-            bevel(ctx, X + 20, Y + 20, W - 40, H - 40, 24)
+            const left = X + 20, top = Y + 20, right = X + W - 20, bottom = Y + H - 20
+            const cutX = 82, cutY = 30
+            ctx.newPath(); ctx.moveTo(left, top); ctx.lineTo(right - cutX, top)
+            ctx.lineTo(right, top + cutY); ctx.lineTo(right, bottom - cutY)
+            ctx.lineTo(right - cutX, bottom); ctx.lineTo(left + cutX, bottom)
+            ctx.lineTo(left, bottom - cutY); ctx.closePath()
             const bg = USER.modalbg
             ctx.setSourceRGBA(bg[0], bg[1], bg[2], 0.98); ctx.fillPreserve()
             ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.75); ctx.setLineWidth(1.2); ctx.stroke()
             txt(ctx, X + 46, Y + 57, "SYSTEM MONITOR // NEUROS", MONO, 16, SYSC, 0.98, 1)
+            txt(ctx, X + 46, Y + 70, "LOCAL NODE / DIAGNOSTIC UPLINK", MONO, 8, SYSC, 0.45)
             const status = `CPU ${st.cpu}%    MEM ${Math.round(memF * 100)}%    UP ${st.uptime}`
             ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(10)
             txt(ctx, X + W - 46 - ctx.textExtents(status).width, Y + 55, status, MONO, 10, SYSC, 0.8)
@@ -1496,10 +1504,11 @@ fi`).then(() => timeout(200, fetchInitApps))
                 const active = st.tab === id, hovered = g.push.hoverKey === `tab:${id}`
                 const color = active || hovered ? USER.press : SYSC
                 const edge = g.attentionFor(`tab:${id}`, active)
-                bevel(ctx, tabX, tabY, width, 30, 9)
+                const points = [[tabX, tabY], [tabX + width - 14, tabY], [tabX + width, tabY + 7],
+                    [tabX + width, tabY + 30], [tabX + 14, tabY + 30], [tabX, tabY + 23]]
+                ctx.newPath(); ctx.moveTo(...points[0]); for (const point of points.slice(1)) ctx.lineTo(...point); ctx.closePath()
                 ctx.setSourceRGBA(color[0], color[1], color[2], active ? 0.10 : hovered ? 0.06 : 0.02); ctx.fill()
-                drawAttentionEdge(ctx, [[tabX, tabY], [tabX + width - 9, tabY], [tabX + width, tabY + 9],
-                    [tabX + width, tabY + 30], [tabX + 9, tabY + 30], [tabX, tabY + 21]], edge.value, false, 0.5)
+                drawAttentionEdge(ctx, points, edge.value, false, 0.5)
                 txt(ctx, tabX + 14, tabY + 20, label, MONO, 11, color, active || hovered ? 1 : 0.75, 1)
                 if (active) { ctx.rectangle(tabX + 5, tabY + 7, 3, 16); ctx.fill() }
                 const x = tabX
@@ -1510,7 +1519,7 @@ fi`).then(() => timeout(200, fetchInitApps))
             let cy3 = Y + 140
 
             if (st.tab === "task") {
-                groupLabel(ctx, mx, cy3, "// CORE ARRAY")
+                groupLabel(ctx, mx, cy3, "// CORE ARRAY / LIVE TELEMETRY")
                 const ncols = Math.max(1, st.cores.length)
                 const sw3 = Math.min(120, (mw - (ncols - 1) * 14) / ncols), sgw = ncols * sw3 + (ncols - 1) * 14
                 st.cores.forEach((v, i) => {
@@ -1538,7 +1547,7 @@ fi`).then(() => timeout(200, fetchInitApps))
                 })
 
                 const py = cy3 + 172
-                groupLabel(ctx, mx, py, "// PROCESSES")
+                groupLabel(ctx, mx, py, "// PROCESS INDEX / ACTIVE TASKS")
                 drawBtn(ctx, g.push, mx + mw - 150, py - 16, 150, 26, st.sel ? "FORCE KILL" : "SELECT A PROC", killSel, !!st.sel, SYSR, st.sel ? ch(0xf011) : "")
                 const ly = py + 14, lh = (Y + H) - ly - 46
                 const pinned = st.sel ? (st.selProc || st.procs.find((p) => p.pid === st.sel)) : null
@@ -1579,10 +1588,47 @@ fi`).then(() => timeout(200, fetchInitApps))
                   const cw3 = mw / 3
               fields.forEach(([k, v], i) => {
                 const fx = mx + (i % 3) * cw3, fy = gy + 12 + Math.floor(i / 3) * 30
-                    const lbl = `// ${k}: `
-                  txt(ctx, fx, fy, lbl, MONO, 10.5, SYSR, 0.85, 0)
-                txt(ctx, fx + ctx.textExtents(lbl).width, fy, String(v || "—"), TITLE, 11.5, SYSC, 0.95, 0)
+                const lbl = `// ${k}: `
+                txt(ctx, fx, fy, lbl, MONO, 10.5, SYSR, 0.85, 0)
+                const labelWidth = ctx.textExtents(lbl).width
+                const available = Math.max(0, cw3 - labelWidth - 18)
+                ctx.selectFontFace(TITLE, 0, 0); ctx.setFontSize(11.5)
+                let value = String(v || "—")
+                if (ctx.textExtents(value).width > available) {
+                    while (value.length && ctx.textExtents(value + "…").width > available) value = value.slice(0, -1)
+                    value += "…"
+                }
+                ctx.save(); ctx.rectangle(fx, fy - 14, cw3 - 10, 19); ctx.clip()
+                txt(ctx, fx + labelWidth, fy, value, TITLE, 11.5, SYSC, 0.95, 0)
+                ctx.restore()
               })
+              // Decorative framing accompanies real local readings; omit it on
+              // short displays instead of crowding the machine information.
+              const panelY = gy + Math.ceil(fields.length / 3) * 30 + 36
+              const panelH = Math.min(200, Y + H - 70 - panelY)
+              if (panelH >= 110 && mw >= 540) {
+                const line = (alpha: number) => { ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], alpha); ctx.setLineWidth(1) }
+                bevel(ctx, mx, panelY, mw, panelH, 16)
+                ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.025); ctx.fillPreserve()
+                line(0.28); ctx.stroke()
+                txt(ctx, mx + 18, panelY + 21, "// LOCAL NODE / SYSTEM TELEMETRY", MONO, 9, SYSC, 0.65, 1)
+                const innerY = panelY + 34, innerH = panelH - 48, firstW = mw * 0.29, secondW = mw * 0.30
+                line(0.17); ctx.newPath()
+                ctx.moveTo(mx + firstW, innerY); ctx.lineTo(mx + firstW, panelY + panelH - 14)
+                ctx.moveTo(mx + firstW + secondW, innerY); ctx.lineTo(mx + firstW + secondW, panelY + panelH - 14); ctx.stroke()
+                txt(ctx, mx + 20, innerY + 18, "NEUROS // LOCAL", MONO, 12, SYSC, 0.8, 1)
+                txt(ctx, mx + 20, innerY + 38, "HOST", MONO, 8, SYSC, 0.45)
+                ctx.save(); ctx.rectangle(mx + 20, innerY + 40, firstW - 40, 20); ctx.clip()
+                txt(ctx, mx + 20, innerY + 55, String(st.sysInfo.host || "—"), MONO, 11, SYSY, 0.9)
+                ctx.restore()
+                const px = mx + firstW + 20, gx = mx + firstW + secondW + 20
+                txt(ctx, px, innerY + 18, "CPU / LOAD", MONO, 9, SYSC, 0.65, 1)
+                txt(ctx, px, innerY + 39, `${st.cpu}%`, MONO, 16, SYSY, 0.9, 1)
+                drawGraph(ctx, px, innerY + 48, secondW - 40, Math.max(16, innerH - 58), st.cpuHist, 100, SYSY)
+                txt(ctx, gx, innerY + 18, "MEMORY / IN USE", MONO, 9, SYSC, 0.65, 1)
+                txt(ctx, gx, innerY + 39, `${Math.round(memF * 100)}%`, MONO, 16, SYSY, 0.9, 1)
+                drawGraph(ctx, gx, innerY + 48, mw - firstW - secondW - 40, Math.max(16, innerH - 58), st.ramHist, 100, SYSC)
+              }
             } else if (st.tab === "init") {
               groupLabel(ctx, mx, cy3, "// INIT_DAEMON")
                 const total = st.initApps.length, onBoot = st.initApps.filter((a) => a.enabled).length
@@ -1859,16 +1905,31 @@ const UpdCtrl = () => {
 }
 
 let sysInst: any = null, sysKey = ""
-const sysDims = () => {
+// GTK 3 on Wayland may report pointer coordinates as (0, 0), regardless of
+// the actual output. Hyprland knows the global cursor position; use it for
+// this keyboard-invoked overlay and fall back if the compositor is unavailable.
+const systemMonitorTarget = () => {
   try {
-    const m = activeMonitor()
+    const [ok, output, , status] = GLib.spawn_sync(null, ["timeout", "1", "hyprctl", "cursorpos", "-j"], null, GLib.SpawnFlags.SEARCH_PATH, null)
+    if (ok && status === 0) {
+      const position = JSON.parse(new TextDecoder().decode(output))
+      if (Number.isFinite(position.x) && Number.isFinite(position.y)) {
+        const monitor = monitorAtPoint(position.x, position.y)
+        if (monitor) return monitor
+      }
+    }
+  } catch (e) { print("[system-monitor] cursor lookup:", e) }
+  return activeMonitor()
+}
+const sysDims = (m) => {
+  try {
     const g = m && m.get_geometry ? m.get_geometry() : null
     if (g && g.width > 0 && g.height > 0) return [g.width, g.height]
   } catch { }
   return [SCREEN_WIDTH, SCREEN_HEIGHT]
 }
-const sysGet = () => {
-  const d = sysDims(), key = `${d[0]}x${d[1]}`
+const sysGet = (monitor) => {
+  const d = sysDims(monitor), key = `${d[0]}x${d[1]}`
   if (!sysInst || sysKey !== key) {
     if (sysInst) { try { sysInst.close() } catch { } }
     sysInst = SysCtrl(d[0], d[1]); sysKey = key; cregistry["sys"] = sysInst
@@ -1887,9 +1948,10 @@ export const closeAllModals = () => {
 
 export const toggleModal = (name) => {
     if (name === "mic") name = "vol"
-    if (name === "sys") sysGet()
+    const target = name === "sys" ? systemMonitorTarget() : null
+    if (name === "sys") sysGet(target)
     for (const k in cregistry) if (k !== name) cregistry[k].close()
-    if (cregistry[name]) { cregistry[name].toggle() }
+    if (cregistry[name]) { cregistry[name].toggle(target) }
     else { for (const k in cregistry) cregistry[k].close() }
 }
 export const isModalOpen = (name) => { if (name === "mic") name = "vol"; return cregistry[name] ? cregistry[name].isOpen() : false }

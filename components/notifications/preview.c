@@ -71,7 +71,10 @@ static int draw_card(cairo_t *cr, Card *card)
     GdkPixbuf *image = load_image(card->image);
     int text_x = image ? PAD + IMAGE_SIZE + 16 : PAD;
     int text_width = CARD_WIDTH - text_x - PAD - 4;
-    PangoLayout *app = layout(cr, card->app, "Rajdhani Bold 9", text_width - 72, 1);
+    const char *app_label = card->app;
+    if (!app_label || !*app_label || g_ascii_strcasecmp(app_label, "notify-send") == 0)
+        app_label = "Intercom";
+    PangoLayout *app = layout(cr, app_label, "Rajdhani Bold 9", text_width - 72, 1);
     PangoLayout *title = layout(cr, card->title, "Rajdhani Bold 13", text_width, 2);
     PangoLayout *body = layout(cr, card->body, "Rajdhani Medium 11", text_width, 3);
     int title_h, body_h;
@@ -96,7 +99,7 @@ static int draw_card(cairo_t *cr, Card *card)
     color(cr, &card->accent, 0.95);
     cairo_move_to(cr, text_x, PAD + 9); cairo_line_to(cr, text_x + 7, PAD + 2);
     cairo_line_to(cr, text_x + 7, PAD + 9); cairo_close_path(cr); cairo_fill(cr);
-    PangoLayout *brand = layout(cr, "NEUROS //", "Rajdhani Bold 9", 64, 1);
+    PangoLayout *brand = layout(cr, "NeurOS //", "Rajdhani Bold 9", 64, 1);
     draw_text(cr, brand, text_x + 12, PAD - 1, &card->secondary, 1);
     draw_text(cr, app, text_x + 75, PAD - 1, &card->secondary, 0.8);
     draw_text(cr, title, text_x, PAD + 24, &card->foreground, 1);

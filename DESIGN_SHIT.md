@@ -13,7 +13,7 @@ built. The controls and CPU/RAM trays have saved visibility preferences. Expande
 views and inherited controls still need redesign. These are source-level facts,
 not certification of live behavior.
 
-The Option D wheel is a beta, not yet a scratchpad: `Super + Ctrl + Space`
+The Option D wheel is a beta, not yet a scratchpad: `Super + Space`
 toggles six fixed point-top actions. Held-modifier activation, configurable
 assignments, scratchpad integration and live focus/input qualification remain
 open. The design prototype and secondary-color attention renderer exist; their
@@ -511,7 +511,7 @@ is proven in the live compositor. Normal binds cannot reliably distinguish a
 modifier press/release sequence from application input or every possible keyboard
 layout.
 
-- Start with a configurable, explicit trigger such as `Super + Ctrl + Space`.
+- Start with a configurable, explicit trigger such as `Super + Space`.
   It opens the exclusive overlay; Q/W/E/A/S/D, pointer activation and `Esc` are
   then handled by the overlay rather than global binds.
 - Prototype the held-modifier version separately using Hyprland's supported
