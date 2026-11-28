@@ -22,6 +22,7 @@ jobs:
       - run: python3 tests/theme-config-harness.py
       - run: python3 tests/terminal-migration-harness.py
       - run: python3 tests/wallpaper-handoff-harness.py
+      - run: python3 tests/updater-release-harness.py
       - run: node --test tests/*.test.mjs
 
   native-preflight:

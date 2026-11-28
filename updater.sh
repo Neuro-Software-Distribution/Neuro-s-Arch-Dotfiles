@@ -65,22 +65,45 @@ local_ver() {
     printf '%s\n' "$v"
 }
 remote_tag() { jq -r --arg repo "$REPO" 'select(._cyberarch_repo == $repo) | .tag_name // empty' "$CACHE" 2>/dev/null; }
-  fetch_release() {
-     [ -n "$REPO" ] || return 1
-     command -v curl >/dev/null 2>&1 || return 1
-  command -v jq   >/dev/null 2>&1 || return 1
-  j="$(curl -fsSL --max-time 8 -H 'Accept: application/vnd.github+json' "$API" 2>/dev/null)" || return 1
-   [ -n "$j" ] || return 1
-  printf '%s' "$j" | jq -e '.tag_name' >/dev/null 2>&1 || return 1
-     mkdir -p "$USER_DIR"
-                printf '%s' "$j" | jq --arg repo "$REPO" '. + {_cyberarch_repo: $repo}' > "$CACHE"
+fetch_release() {
+    local response status curl_status
+    [ -n "$REPO" ] || { err "Origin must be a supported GitHub URL." >&2; return 1; }
+    command -v curl >/dev/null 2>&1 || { err "curl is required for release lookup." >&2; return 1; }
+    command -v jq >/dev/null 2>&1 || { err "jq is required for release lookup." >&2; return 1; }
+    response="$(mktemp)" || return 1
+    status="$(curl -sSL --max-time 8 -H 'Accept: application/vnd.github+json' -o "$response" -w '%{http_code}' "$API")" && curl_status=0 || curl_status=$?
+    if [ "$curl_status" -ne 0 ]; then
+        rm -f "$response"
+        err "Could not contact GitHub (curl exit $curl_status)." >&2
+        return 1
+    fi
+    if [ "$status" != 200 ]; then
+        rm -f "$response"
+        if [ "$status" = 404 ]; then
+            err "No published stable release found for $REPO (or the repository is inaccessible)." >&2
+            err "Publish a GitHub release with a version tag; release assets are not required." >&2
+        else
+            err "GitHub release lookup returned HTTP $status." >&2
+        fi
+        return 1
+    fi
+    if ! jq -e '.tag_name | strings | select(length > 0)' "$response" >/dev/null 2>&1; then
+        rm -f "$response"
+        err "GitHub returned an invalid release response." >&2
+        return 1
+    fi
+    mkdir -p "$USER_DIR"
+    jq --arg repo "$REPO" '. + {_cyberarch_repo: $repo}' "$response" > "$CACHE"
+    local result=$?
+    rm -f "$response"
+    return "$result"
 }
 
 cmd_check() {    lv="$(local_ver)"
     if [ "${1:-}" = "--cached" ]; then
   [ -r "$CACHE" ] || { printf '0\n%s\n%s\n' "$lv" "$lv"; return 0; }
     else
-  fetch_release || { printf '0\n%s\n%s\n' "$lv" "$lv"; return 0; }
+  fetch_release 2>/dev/null || { printf '0\n%s\n%s\n' "$lv" "$lv"; return 0; }
     fi
      rv="$(norm "$(remote_tag)")"
       [ -n "$rv" ] || { printf '0\n%s\n%s\n' "$lv" "$lv"; return 0; }

@@ -148,6 +148,13 @@ and restores the previous commit if activation fails. Releases that change the
 installer or dependencies require a separate installation or package upgrade.
 Local edits are never automatically stashed.
 
+The GitHub repository configured as `origin` must have a published, non-prerelease
+GitHub release with a version tag (for example `v2.46`). The tag must identify a
+commit that can fast-forward the installed checkout. The updater fetches that Git
+tag; it does not download release assets, so no packaged archive is required.
+A repository with only branches, tags, drafts, or prereleases has no latest stable
+release for this updater.
+
 If the HUD fails, open a terminal with the compositor keybind or switch to a TTY
 and inspect `~/.local/state/cyberarch/shell.log`. Run
 `~/.config/hypr/themes/cyberpunk/scripts/restart` from the graphical session after
