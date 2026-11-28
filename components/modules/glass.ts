@@ -75,6 +75,14 @@ export const drawGlass = (ctx, x, y, w, h, col: [number, number, number] = CYAN,
     const edge = panelPath(ctx, x, y, w, h)
     if (attention) { ctx.newPath(); drawAttentionEdge(ctx, edge, attention.value, attention.focused, 1.3) }
     else { ctx.setSourceRGBA(lr, lg, lb, 0.92); ctx.setLineWidth(0.9); ctx.stroke() }
+    // Shared equipment markings, kept inside the frame and away from controls.
+    ctx.save()
+    ctx.setSourceRGBA(r, g, b, 0.42 * a)
+    for (let i = 0; i < 4; i++) {
+        ctx.rectangle(x + 15 + i * 7, y + h - 8, i === 0 ? 4 : 3, 1)
+        ctx.fill()
+    }
+    ctx.restore()
 }
 
 

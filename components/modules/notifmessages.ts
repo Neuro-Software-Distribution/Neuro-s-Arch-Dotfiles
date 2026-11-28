@@ -313,6 +313,11 @@ const draw = (ctx: any) => {
         ctx.fill()
         strokePath(ctx, plane, PANEL_FRAME, NEON.dock, 0.7 * pa, 1, true)
         fillQuad(ctx, plane, ICONW + 10, 10, ICONW + 13, FOOTER_Y + 12, NEON.press, 0.8 * pa)
+        // Registration marks tie the message console to the utility trays.
+        for (let i = 0; i < 4; i++) {
+            fillQuad(ctx, plane, ICONW + 22 + i * 7, FOOTER_Y + 7,
+                ICONW + 26 + i * 7, FOOTER_Y + 9, NEON.press, (i === 0 ? 0.7 : 0.28) * pa)
+        }
     }
 
     if (animProg > 0.10) {

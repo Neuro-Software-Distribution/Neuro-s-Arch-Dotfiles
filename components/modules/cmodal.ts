@@ -1446,7 +1446,7 @@ fi`).then(() => timeout(200, fetchInitApps))
 
             const FW = SW, FH = SH
             ctx.setSourceRGBA(0.015, 0.02, 0.03, 0.42); ctx.rectangle(0, 0, FW, FH); ctx.fill()
-            const pulse = 0.94 + 0.06 * Math.sin(Date.now() / 500)
+            const pulse = animOn("animModal") ? 0.94 + 0.06 * Math.sin(Date.now() / 500) : 1
             const vcx = FW / 2, vcy = FH / 2, reach = Math.hypot(FW, FH) / 2
             const vg = new Cairo.RadialGradient(vcx, vcy, reach * 0.16, vcx, vcy, reach * 0.98)
             // the sys monitor veil is dusk orange, screenshots use the cyan overlay
@@ -1480,13 +1480,17 @@ fi`).then(() => timeout(200, fetchInitApps))
             tabs.forEach(([t, id]) => {
               const w2 = ctx.textExtents(t).width, active = st.tab === id
                 const hv = g.push.hoverKey === `tab:${id}`
-              const tcol: any = active ? SYSC : (hv ? [1, 0.55, 0.5] : SYSR)
+              const tcol: any = active || hv ? SYSC : SYSR
                 if (hv && !active) {
-              ctx.setSourceRGBA(tcol[0], tcol[1], tcol[2], 0.06 + 0.04 * Math.sin(Date.now() / 130))
+              ctx.setSourceRGBA(tcol[0], tcol[1], tcol[2], animOn("animModal") ? 0.09 + 0.03 * Math.sin(Date.now() / 130) : 0.12)
                     ctx.rectangle(tx3 - 8, hy, w2 + 16, 28); ctx.fill()
                 }
                 txt(ctx, tx3, hy + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.72), 1)
-              if (active) { ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.95); ctx.rectangle(tx3, hy + 23, w2, 2); ctx.fill() }
+              if (active) {
+                  ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.95)
+                  ctx.rectangle(tx3, hy + 23, w2, 2); ctx.fill()
+                  ctx.rectangle(tx3 - 7, hy + 8, 3, 7); ctx.fill()
+              }
                 g.push({ kind: "tab", key: `tab:${id}`, hoverable: true, bx0: tx3 - 10, by0: hy, bx1: tx3 + w2 + 10, by1: hy + 28, on: () => { st.tab = id; if (id === "logs") fetchLogs(); ctrl.requestDraw() } })
               tx3 += w2 + 30
             })

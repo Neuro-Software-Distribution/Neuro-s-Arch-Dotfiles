@@ -43,6 +43,7 @@ class WallpaperHandoff(unittest.TestCase):
             esac
         ''')
         self.stub('socat', '''
+            case "${2:-}" in UNIX-CONNECT:*) ;; *) exit 2 ;; esac
             if [ "${TEST_READY:-0}" = 1 ]; then
                 printf '%s\\n' '{"error":"success","data":{"w":1}}'
             else
@@ -75,7 +76,7 @@ class WallpaperHandoff(unittest.TestCase):
         with socket.socket(socket.AF_UNIX) as listener:
             listener.bind(str(display))
             env = dict(os.environ, HOME=str(self.home), XDG_RUNTIME_DIR=str(self.runtime),
-                       HYPRLAND_INSTANCE_SIGNATURE='test',
+                       HYPRLAND_INSTANCE_SIGNATURE='a' * 70,
                        WAYLAND_DISPLAY='wayland-1', PATH=str(self.bin) + ':' + os.environ['PATH'],
                        CYBER_SDDM_CURRENT_DIR=str(self.work / 'not-installed'),
                        OLD_MPV_PID=str(self.old_mpv.pid), OLD_AWWW_PID=str(self.old_awww.pid),
@@ -88,6 +89,13 @@ class WallpaperHandoff(unittest.TestCase):
         self.assertEqual(result.returncode, 1, result.stderr)
         self.assertIsNone(self.old_mpv.poll())
         self.assertIsNone(self.old_awww.poll())
+
+    def test_uppercase_video_extension_uses_video_renderer(self):
+        self.video = self.video.rename(self.work / 'candidate.MP4')
+        result = self.run_wallpaper(True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.old_mpv.wait(timeout=1)
+        self.old_awww.wait(timeout=1)
 
     def test_ready_replacement_retires_existing_renderers(self):
         result = self.run_wallpaper(True)

@@ -26,10 +26,10 @@ over["modalbg"] = true`
     vm.runInContext(stripTypeScriptTypes(source), context)
     vm.runInContext('loadUserColors()', context)
     const state = JSON.parse(vm.runInContext(`JSON.stringify({
-        palette: getActivePalette(), red: NEON.red, expectedRed: PALETTES.NETWATCH.red,
+        palette: getActivePalette(), red: NEON.red, expectedRed: PALETTES.NSD.red,
         dock: NEON.dock, bg: NEON.modalbg, alpha: getUserAlpha("modalbg")
     })`, context))
-    assert.equal(state.palette, 'NETWATCH')
+    assert.equal(state.palette, 'NSD')
     assert.deepEqual(state.red, state.expectedRed)
     assert.deepEqual(state.dock, [4, 5, 6])
     assert.deepEqual(state.bg, [7, 8, 9])

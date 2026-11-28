@@ -43,7 +43,7 @@ if [ -d "$sddm_current" ] && [ -w "$sddm_current" ] && [ -r "$wallpaper" ]; then
 fi
 
 cache_dir="${XDG_CACHE_HOME:-${HOME}/.cache}/awww"
-mkdir -p "$cache_dir"
+mkdir -p "$cache_dir" "${HOME}/.cache"
 
 runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
 find_compositor_socket() {
@@ -72,8 +72,8 @@ mpvpaper_ready() {
     for _ in $(seq 1 200); do
         if [ -S "$socket" ] \
            && printf '%s\n' '{ "command": ["get_property", "video-params"] }' \
-              | timeout 1 socat - "$socket" 2>/dev/null \
-              | grep -q '"error":"success"'; then
+              | timeout 1 socat - "UNIX-CONNECT:$socket" 2>/dev/null \
+              | grep -Eq '"error"[[:space:]]*:[[:space:]]*"success"'; then
             return 0
         fi
         kill -0 "$pid" 2>/dev/null || return 1
@@ -106,16 +106,21 @@ if [ "$compositor_ready" -ne 1 ]; then
     exit 1
 fi
 
-case "${wallpaper##*.}" in
+wp_ext="$(printf '%s' "${wallpaper##*.}" | tr '[:upper:]' '[:lower:]')"
+case "$wp_ext" in
     mp4|webm|mkv|mov)
         if command -v mpvpaper >/dev/null 2>&1; then
             old_mpvp="$(pgrep -x mpvpaper 2>/dev/null || true)"
             old_awww="$(pgrep -x awww-daemon 2>/dev/null || true)"
-            sock="$CYBER_RUNTIME/cyberwall-$$.sock"
-            rm -f "$sock"
+            # Hyprland instance signatures can make CYBER_RUNTIME exceed the
+            # Unix socket path limit. Use a short, private temporary directory.
+            socket_dir="$(mktemp -d "$runtime_dir/cw.XXXXXXXX")" || exit 1
+            sock="$socket_dir/mpv.sock"
             mpvpaper -o "no-audio --really-quiet --loop-file=inf --keepaspect=no --hwdec=auto-safe --gpu-shader-cache=no --input-ipc-server=$sock" ALL "$wallpaper" 9>&- >>"${HOME}/.cache/cyberpunk-mpvpaper.log" 2>&1 &
             new_pid=$!
             if mpvpaper_ready "$new_pid" "$sock"; then
+                rm -f "$sock"
+                rmdir "$socket_dir" 2>/dev/null || true
                 [ -n "$old_mpvp" ] && kill $old_mpvp 2>/dev/null
                 [ -n "$old_awww" ] && kill $old_awww 2>/dev/null
                 exit 0
@@ -123,6 +128,7 @@ case "${wallpaper##*.}" in
             kill "$new_pid" 2>/dev/null || true
             wait "$new_pid" 2>/dev/null || true
             rm -f "$sock"
+            rmdir "$socket_dir" 2>/dev/null || true
             printf '%s\n' 'new mpvpaper never became render-ready |::| keeping the previous wallpaper' >>"${HOME}/.cache/cyberpunk-mpvpaper.log"
             exit 1
         fi

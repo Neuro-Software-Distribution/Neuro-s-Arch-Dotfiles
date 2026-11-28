@@ -23,6 +23,7 @@ function fixture(module, saved, reply = {}) {
         Box: widget, EventBox: widget,
         DrawingArea: props => { const area = widget(props); areas.push(area); return area },
         scaleOf: () => 1, Keymode: { ON_DEMAND: 1 },
+        animOn: () => true,
         Gdk: { EventMask: { BUTTON_PRESS_MASK: 1, POINTER_MOTION_MASK: 2, LEAVE_NOTIFY_MASK: 4 } },
         GLib: {
             file_get_contents: path => { reads.push(path); return [true, new TextEncoder().encode(JSON.stringify(saved))] },

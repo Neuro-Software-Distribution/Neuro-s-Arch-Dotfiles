@@ -6,7 +6,6 @@ import { CYBER_DIR, SCALE, winScale } from "../../env.ts"
 import { TITLE, MONO, NAVINE, NEUE, ORBITRON } from "./fonts.ts"
 import { makePlane, tiltText, strokePath } from "./proj.ts"
 import { setReadFilter, removeFromHistory } from "./notifmessages.ts"
-import { dockNotifDecr } from "./dock.ts"
 import { passthrough } from "./anim.ts"
 import { NEON, USER_A, onColorChange, glassAlpha, glassMode, tintSurface, imgTint, neonBtn, isOvr, notifIconTint } from "./colors.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
@@ -246,7 +245,7 @@ const focusApp = (appRaw: string, desktopEntry: string) => {
 export const notifReadCurrent = () => {
     const m = msgs[0]; if (!m || m.out) return
     m.read = true; _readIds.add(m.id)
-    removeFromHistory(m.id); dockNotifDecr()
+    removeFromHistory(m.id)
     try {
         const n = notifd?.get_notification?.(m.id)
         if (n) {
@@ -265,7 +264,7 @@ export const notifDismiss = () => {
     const m = msgs[0]
     if (m && !m.out) {
         m.read = true; _readIds.add(m.id)
-        removeFromHistory(m.id); dockNotifDecr()
+        removeFromHistory(m.id)
         try { notifd?.get_notification?.(m.id)?.dismiss?.() } catch { }
         removeMsg(m)
     }

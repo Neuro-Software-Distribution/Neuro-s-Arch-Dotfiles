@@ -35,7 +35,7 @@ test('tray peeks, reveals its tab on hover, and opens widgets only on click or h
         MarketsPanel: mon => { informationWidgets.push(["markets", mon]); return widget({}) }, scaleOf: () => 1, TITLE: 'Quantico', MONO: 'Tektur',
         NEON: { dock: [1, 2, 3], press: [10, 20, 30], modalbg: [4, 5, 6] },
         rgbToHex: () => '#010203',
-        animOn: () => animated, cfgStr: () => 'normal',
+        animOn: () => animated, cfgStr: () => 'normal', cfgBool: () => true,
         onColorChange: cb => { listeners.add(cb); return () => listeners.delete(cb) },
         onConfigChange: cb => { configListeners.add(cb); return () => configListeners.delete(cb) },
     })
@@ -89,7 +89,7 @@ test('tray peeks, reveals its tab on hover, and opens widgets only on click or h
     const content = body.children[0]
     assert.equal(body.reveal_child, true)
     assert.equal(content.no_show_all, true)
-    assert.equal(docks[0].notifications, false)
+    assert.equal(docks[0].mon, monitors[0])
     leave(0); settle()
     assert.equal(body.reveal_child, true, 'clicked-open widgets stay open on pointer exit')
     assert.equal(face.heightRequest, 44)

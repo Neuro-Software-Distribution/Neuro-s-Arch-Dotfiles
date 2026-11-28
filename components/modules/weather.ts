@@ -9,6 +9,7 @@ import { createModal } from "./cmodal.ts"
 import { txt as gtxt, pango as gpango, CYAN as GCYAN, ACC as GACC, HEADER as GHEAD, TITLE as GTITLE, MONO as GMONO, pip, projQuad } from "./glass.ts"
 import { openTimeModal } from "./timeset.ts"
 import { TITLE, MONO, ICONF } from "./fonts.ts"
+import { animOn } from "./config.ts"
 
 const W = 320
 const plane = makePlane({ w: W, h: 190, yaw: 24, pitch: 3, roll: -1, focal: 1300, dist: 1300, pad: 16 })
@@ -109,6 +110,8 @@ const drawWeather = (ctx, now) => {
  tiltText(ctx, plane, MX0, 20, `${pad2(now.getHours())}:${pad2(now.getMinutes())}`, TITLE, 18, mapAccent.clock, 0.92, { bold: true })
  tiltText(ctx, plane, MX1, 20, wxName.slice(0, 24), TITLE, 10, mapAccent.city, 0.9, { align: "r", bold: true })
  const FORECOL = mapAccent.forecast || WEATHER_COLOR
+ strokePath(ctx, plane, [[MX0, 28], [MX1, 28]], FORECOL, 0.25, 1)
+ fillQuad(ctx, plane, MX0, 29, MX0 + 20, 30, FORECOL, 0.65)
  tiltText(ctx, plane, MX0 + 14, MY1 - 14, wxIcon(wxDesc), ICONF, 10, FORECOL, 0.95, { bold: true, glow: 0.3 })
  tiltText(ctx, plane, MX0 + 30, MY1 - 14, `${wxDesc.toUpperCase()} · ${wxTemp}`, TITLE, 9.5, FORECOL, 0.92, { bold: true, glow: 0.3 })
  tiltText(ctx, plane, MX0 + 2, MY1 + 16, `FEELS LIKE ${wxFeels} · HUM ${wxHum}% · WIND ${wxWind}`, MONO, 6.6, WEATHER_ACCENT, 0.52, { bold: true })
@@ -216,7 +219,7 @@ export const openCityModal = () => { ensureWxModal(); wxModal.toggle() }
 
 let fcModal: any = null, fcSel = 0, fcTick = 0, fcOpenAt = 0, fcCityTap = 0
 const ease = (t) => 1 - Math.pow(1 - Math.max(0, Math.min(1, t)), 3)
-const fcReveal = () => ease((Date.now() - fcOpenAt) / 620)
+const fcReveal = () => animOn("animModal") ? ease((Date.now() - fcOpenAt) / 620) : 1
 
 const YEL: [number, number, number] = USER.cyan
 const ARA: [number, number, number] = GACC
@@ -249,7 +252,7 @@ const fcCard = (ctx, g, d, i, x, y, w, h, sel, rv) => {
  ctx.setSourceRGBA(col[0] * 0.22, col[1] * 0.3, col[2] * 0.36, sel ? 0.26 : 0.09); ctx.fill()
  chamfer(ctx, x, y, w, h, 12)
  ctx.setSourceRGBA(col[0], col[1], col[2], sel ? 0.95 : 0.26); ctx.setLineWidth(sel ? 1.4 : 0.9); ctx.stroke()
- if (sel) { ctx.setSourceRGBA(YEL[0], YEL[1], YEL[2], 0.72 + 0.28 * Math.sin(fcTick / 7)); ctx.rectangle(x, y, w, 3); ctx.fill() }
+ if (sel) { ctx.setSourceRGBA(YEL[0], YEL[1], YEL[2], animOn("animModal") ? 0.72 + 0.28 * Math.sin(fcTick / 7) : 1); ctx.rectangle(x, y, w, 3); ctx.fill() }
  const cw2 = (s, font, size, bold) => { ctx.selectFontFace(font, 0, bold ? 1 : 0); ctx.setFontSize(size); return ctx.textExtents(s).width }
  const fit = (s, font, size, bold, max) => { let sz = size; while (sz > 8 && cw2(s, font, sz, bold) > max) sz -= 0.5; return sz }
  gtxt(ctx, x + 5, y + 15, `0${i + 1}`, GMONO, 7, sel ? YEL : ARA, sel ? 0.75 : 0.35)

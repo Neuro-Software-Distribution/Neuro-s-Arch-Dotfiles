@@ -96,6 +96,12 @@ export const createUtilTray = (options: TrayOptions) => {
             ctx.moveTo(33 * scale, 9 * scale); ctx.lineTo(33 * scale, h - 8 * scale)
             ctx.moveTo(42 * scale, h - 5 * scale); ctx.lineTo(w - 40 * scale, h - 5 * scale)
             ctx.stroke()
+            // Small registration marks give each tray a shared equipment-panel edge.
+            for (let i = 0; i < 4; i++) {
+                ink(i === 0 ? 0.65 : 0.24)
+                ctx.rectangle((43 + i * 6) * scale, 4 * scale, 3 * scale, 1.5 * scale)
+                ctx.fill()
+            }
             ctx.selectFontFace(MONO, 0, 0)
             ctx.setFontSize(Math.max(8, 10 * scale)); ink(0.85)
             ctx.moveTo(8 * scale, 25 * scale); ctx.showText(options.code || "//")
