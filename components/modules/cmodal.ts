@@ -22,7 +22,7 @@ import { ThemesWindow, toggleThemeSettings } from "./themesettings.ts"
 import { TerminalThemeCtrl } from "./terminal_theme.ts"
 import { ThemeSettingsCtrl } from "./themesettings_ctrl.ts"
 import { USER, onColorChange, hudSoft, neonBtn } from "./colors.ts"
-import { createAttention } from "./attention.ts"
+import { createAttention, drawAttentionEdge } from "./attention.ts"
 import { sndOn, sndFile, animOn } from "./config.ts"
 
 const sh = (c) => execAsync(["sh", "-c", c]).catch(() => "")
@@ -191,6 +191,13 @@ export const createModal = (spec) => {
     let hitRegions: any[] = [], drag: any = null, hoverKey: any = null, pressKey: any = null, dragKey: any = null, lastXY: any = null
     const ctrl: any = { name }
     let attention: ReturnType<typeof createAttention> | null = null
+    const controlAttention = new Map<string, ReturnType<typeof createAttention>>()
+    const attentionFor = (key: string, selected: boolean) => {
+        let state = controlAttention.get(key)
+        if (!state) { state = createAttention(area); controlAttention.set(key, state) }
+        state.set({ hovered: hoverKey === key, selected })
+        return state
+    }
 
     const push: any = (reg) => { hitRegions.push(reg) }
     push.hoverKey = null
@@ -208,7 +215,7 @@ export const createModal = (spec) => {
         hitRegions = []; push.hoverKey = hoverKey; push.pressKey = pressKey; push.dragKey = dragKey
         HUDC = spec.hud ? HUDRED : null
         const bX = spec.hud ? X + STRIPW : X, bW = spec.hud ? w - STRIPW : w
-        spec.draw(ctx, { push, X: bX, Y, w: bW, h, col, accent, attention, refresh: () => ctrl.requestDraw() })
+        spec.draw(ctx, { push, X: bX, Y, w: bW, h, col, accent, attention, attentionFor, refresh: () => ctrl.requestDraw() })
         HUDC = null; setTxtFX(false)
     }
     const draw = (screenCtx) => {
@@ -269,7 +276,7 @@ export const createModal = (spec) => {
     area.connect("draw", (_w, ctx) => (draw(ctx), false))
     const offColor = onColorChange(() => { surf = null; ctrl.requestDraw() })
     if (!spec.hud && (!spec.noGlass || spec.attention)) attention = createAttention(area)
-    area.connect("unmap", () => attention?.reset())
+    area.connect("unmap", () => { attention?.reset(); for (const state of controlAttention.values()) state.reset() })
 
     const evt = EventBox({ child: area })
     try { evt.add_events(Gdk.EventMask.BUTTON_PRESS_MASK | Gdk.EventMask.BUTTON_RELEASE_MASK | Gdk.EventMask.POINTER_MOTION_MASK | Gdk.EventMask.ENTER_NOTIFY_MASK | Gdk.EventMask.LEAVE_NOTIFY_MASK | Gdk.EventMask.SCROLL_MASK | Gdk.EventMask.SMOOTH_SCROLL_MASK) } catch {}
@@ -334,7 +341,7 @@ export const createModal = (spec) => {
     else if (spec.anchorLeft) { winOpts.anchor = Anchor.LEFT; winOpts.margin_left = spec.marginLeft ?? Math.round(SCREEN_WIDTH * 0.03) }
     win = Window(winOpts)
     win.connect("notify::is-active", () => attention?.set({ focused: !!win.is_active }))
-    win.connect("destroy", () => { attention?.dispose(); offColor(); stopTimers() })
+    win.connect("destroy", () => { attention?.dispose(); for (const state of controlAttention.values()) state.dispose(); controlAttention.clear(); offColor(); stopTimers() })
     win.connect("key-press-event", onKeyPress)
     win.connect("key-release-event", onKeyRelease)
     ctrl.win = win
@@ -1080,7 +1087,7 @@ const BatCtrl = () => {
     return ctrl
 }
 
-const SYSY: [number, number, number] = USER.amber
+const SYSY: [number, number, number] = USER.press
 const SYSC: [number, number, number] = USER.dock
 const SYSR: [number, number, number] = USER.overlay
 const SYS_LOCK = `${RUNTIME_DIR}/cyber-sysmon.lock`
@@ -1242,8 +1249,6 @@ const holoFrame = (ctx, x, y, w, h) => {
   cnrs.forEach(([ccx, ccy, sx, sy]) => {
       ctx.newPath(); ctx.moveTo(ccx, ccy + tck * sy); ctx.lineTo(ccx, ccy); ctx.lineTo(ccx + tck * sx, ccy); ctx.stroke()
   })
-    const scnY = y + ((Date.now() / 12) % h)
-  ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.08); ctx.rectangle(x, scnY, w, 2); ctx.fill()
 }
 
 const SysCtrl = (SW, SH) => {
@@ -1256,7 +1261,7 @@ const SysCtrl = (SW, SH) => {
           pkgs: "—", session: "—", term: "—", arch: "—", gpuLoad: -1, gpuHist: [],
         coresPhys: "—", maxFreq: "—", cache: "—", gpuDriver: "—", gpuVram: "—", gpuTemp: "—",
             procCount: "—", localIp: "—", battery: "—" },
-        initApps: [], initScroll: 0,
+        initApps: [], initScroll: 0, initFocus: 0,
       logLines: [],
     }
     let ctrl
@@ -1277,6 +1282,7 @@ done`).then((o) => {
                 const base = (path || "").split("/").pop() || ""
                 return { path, base, name: name || base.replace(/\.desktop$/, ""), enabled: en === "1" }
             })
+            st.initFocus = Math.min(st.initFocus, Math.max(0, st.initApps.length - 1))
             ctrl.requestDraw()
         })
     }
@@ -1423,12 +1429,6 @@ fi`).then(() => timeout(200, fetchInitApps))
     const killSel = () => { if (st.sel) sh(`kill -9 ${st.sel} 2>/dev/null`).then(() => { st.sel = ""; st.selProc = null; timeout(400, refresh) }) }
     ctrl = createModal({
         name: "sys", tabTitle: "SYSTEM MONITOR", W: SW, H: SH, noGlass: true, pad: 0,
-        idleFrameMs: 70,
-        onFrame: () => {
-            const tc = st.cpu / 100, tm = st.memU / st.memT
-            st.aCpu += (tc - st.aCpu) * 0.16
-            st.aMem += (tm - st.aMem) * 0.16
-        },
         onOpen: () => {
             st.sel = ""; st.selProc = null; st.scroll = 0; st.cpuHist = []; st.ramHist = []
             st.upHist = []; st.downHist = []; st.prevCpu = null; st.prevNet = null
@@ -1436,6 +1436,39 @@ fi`).then(() => timeout(200, fetchInitApps))
         },
         onClose: () => { stopModalStats(); sysSndOff() },
         poll: refresh, pollMs: 900,
+        onKey: (key) => {
+            const tabs = ["task", "system", "init", "logs"]
+            let next = -1
+            if (key >= Gdk.KEY_1 && key <= Gdk.KEY_4) next = key - Gdk.KEY_1
+            else if (key === Gdk.KEY_Right || key === Gdk.KEY_Left) {
+                const direction = key === Gdk.KEY_Right ? 1 : -1
+                next = (tabs.indexOf(st.tab) + direction + tabs.length) % tabs.length
+            }
+            if (next >= 0) {
+                st.tab = tabs[next]
+                if (st.tab === "logs") fetchLogs()
+                ctrl.requestDraw(); return true
+            }
+            if (key === Gdk.KEY_Up || key === Gdk.KEY_Down) {
+                const direction = key === Gdk.KEY_Down ? 1 : -1
+                if (st.tab === "task" && st.procs.length) {
+                    const current = st.procs.findIndex(p => p.pid === st.sel)
+                    const index = current < 0 ? (direction > 0 ? 0 : st.procs.length - 1) : Math.max(0, Math.min(st.procs.length - 1, current + direction))
+                    select(st.procs[index])
+                } else if (st.tab === "init" && st.initApps.length) {
+                    st.initFocus = Math.max(0, Math.min(st.initApps.length - 1, st.initFocus + direction))
+                    const visible = Math.max(1, Math.floor((SH - 250) / 46))
+                    if (st.initFocus < st.initScroll) st.initScroll = st.initFocus
+                    if (st.initFocus >= st.initScroll + visible) st.initScroll = st.initFocus - visible + 1
+                    ctrl.requestDraw()
+                }
+                return true
+            }
+            if ((key === Gdk.KEY_Return || key === Gdk.KEY_KP_Enter) && st.tab === "init" && st.initApps[st.initFocus]) {
+                toggleAutostart(st.initApps[st.initFocus]); return true
+            }
+            return false
+        },
         onScroll: (d) => {
             if (st.tab === "task") { st.scroll = Math.max(0, Math.min(Math.max(0, st.procs.length - 1), st.scroll + d)); ctrl.requestDraw() }
             else if (st.tab === "init") { st.initScroll = Math.max(0, Math.min(Math.max(0, st.initApps.length - 1), st.initScroll + d)); ctrl.requestDraw() }
@@ -1444,69 +1477,37 @@ fi`).then(() => timeout(200, fetchInitApps))
             const X = g.X, Y = g.Y, W = g.w, H = g.h
             const memF = st.memU / st.memT
 
-            const FW = SW, FH = SH
-            ctx.setSourceRGBA(0.015, 0.02, 0.03, 0.42); ctx.rectangle(0, 0, FW, FH); ctx.fill()
-            const pulse = animOn("animModal") ? 0.94 + 0.06 * Math.sin(Date.now() / 500) : 1
-            const vcx = FW / 2, vcy = FH / 2, reach = Math.hypot(FW, FH) / 2
-            const vg = new Cairo.RadialGradient(vcx, vcy, reach * 0.16, vcx, vcy, reach * 0.98)
-            // the sys monitor veil is dusk orange, screenshots use the cyan overlay
-            const [ov0, ov1, ov2] = USER.sysveil || USER.overlay
-            vg.addColorStopRGBA(0, ov0 * 0.08, ov1 * 0.08, ov2 * 0.08, 0.46)
-            vg.addColorStopRGBA(0.5, ov0 * 0.2, ov1 * 0.2, ov2 * 0.2, 0.68)
-            vg.addColorStopRGBA(1, ov0 * 0.62, ov1 * 0.62, ov2 * 0.62, 0.92 * pulse)
-            ctx.setSource(vg); ctx.rectangle(0, 0, FW, FH); ctx.fill()
-
-            const hy = Y + 40
-            ctx.setSourceRGBA(SYSR[0], SYSR[1], SYSR[2], 0.55); ctx.setLineWidth(1)
-            ctx.newPath(); ctx.moveTo(X + 40, hy + 26); ctx.lineTo(X + W - 40, hy + 26); ctx.stroke()
-            const pair = (px, num, lab, col) => {
-                ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(23)
-                txt(ctx, px, hy + 18, num, TITLE, 23, col, 0.98, 1, 0.4)
-                const nw = ctx.textExtents(num).width
-                txt(ctx, px + nw + 8, hy + 18, lab, TITLE, 12, col, 0.8, 1)
-                for (let i = 0; i < 6; i++) {
-                    ctx.setSourceRGBA(col[0], col[1], col[2], i < 3 ? 0.8 : 0.25)
-                    ctx.rectangle(px + i * 9, hy + 30, i < 3 ? 7 : 3, 2); ctx.fill()
-                }
-                return px + nw + 14 + ctx.textExtents(lab).width
-            }
-            let hx = X + 46
-            hx = pair(hx, `${st.cpu}`, "CPU", SYSY) + 34
-            hx = pair(hx, `${Math.round(memF * 100)}`, "MEM", SYSC) + 34
-            const tabs = [["PROC_LIST", "task"], ["SYS_INFO", "system"], ["INIT_DAEMON", "init"], ["INFO_LOGS", "logs"]]
-            ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(13)
-            let tw2 = tabs.reduce((a2, [t]) => a2 + ctx.textExtents(t).width + 30, 0)
-            let tx3 = X + W / 2 - tw2 / 2
-            tabs.forEach(([t, id]) => {
-              const w2 = ctx.textExtents(t).width, active = st.tab === id
-                const hv = g.push.hoverKey === `tab:${id}`
-              const tcol: any = active || hv ? SYSC : SYSR
-                if (hv && !active) {
-              ctx.setSourceRGBA(tcol[0], tcol[1], tcol[2], animOn("animModal") ? 0.09 + 0.03 * Math.sin(Date.now() / 130) : 0.12)
-                    ctx.rectangle(tx3 - 8, hy, w2 + 16, 28); ctx.fill()
-                }
-                txt(ctx, tx3, hy + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.72), 1)
-              if (active) {
-                  ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.95)
-                  ctx.rectangle(tx3, hy + 23, w2, 2); ctx.fill()
-                  ctx.rectangle(tx3 - 7, hy + 8, 3, 7); ctx.fill()
-              }
-                g.push({ kind: "tab", key: `tab:${id}`, hoverable: true, bx0: tx3 - 10, by0: hy, bx1: tx3 + w2 + 10, by1: hy + 28, on: () => { st.tab = id; if (id === "logs") fetchLogs(); ctrl.requestDraw() } })
-              tx3 += w2 + 30
+            // A quiet, opaque console surface keeps real data legible over any wallpaper.
+            ctx.setSourceRGBA(0.015, 0.018, 0.035, 0.70); ctx.rectangle(0, 0, SW, SH); ctx.fill()
+            bevel(ctx, X + 20, Y + 20, W - 40, H - 40, 24)
+            const bg = USER.modalbg
+            ctx.setSourceRGBA(bg[0], bg[1], bg[2], 0.98); ctx.fillPreserve()
+            ctx.setSourceRGBA(SYSC[0], SYSC[1], SYSC[2], 0.75); ctx.setLineWidth(1.2); ctx.stroke()
+            txt(ctx, X + 46, Y + 57, "SYSTEM MONITOR // NEUROS", MONO, 16, SYSC, 0.98, 1)
+            const status = `CPU ${st.cpu}%    MEM ${Math.round(memF * 100)}%    UP ${st.uptime}`
+            ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(10)
+            txt(ctx, X + W - 46 - ctx.textExtents(status).width, Y + 55, status, MONO, 10, SYSC, 0.8)
+            const tabs = [["1 PROCESSES", "task"], ["2 SYSTEM", "system"], ["3 STARTUP", "init"], ["4 LOGS", "logs"]]
+            const tabY = Y + 76
+            let tabX = X + 46
+            tabs.forEach(([label, id]) => {
+                ctx.selectFontFace(MONO, 0, 1); ctx.setFontSize(11)
+                const width = ctx.textExtents(label).width + 28
+                const active = st.tab === id, hovered = g.push.hoverKey === `tab:${id}`
+                const color = active || hovered ? USER.press : SYSC
+                const edge = g.attentionFor(`tab:${id}`, active)
+                bevel(ctx, tabX, tabY, width, 30, 9)
+                ctx.setSourceRGBA(color[0], color[1], color[2], active ? 0.10 : hovered ? 0.06 : 0.02); ctx.fill()
+                drawAttentionEdge(ctx, [[tabX, tabY], [tabX + width - 9, tabY], [tabX + width, tabY + 9],
+                    [tabX + width, tabY + 30], [tabX + 9, tabY + 30], [tabX, tabY + 21]], edge.value, false, 0.5)
+                txt(ctx, tabX + 14, tabY + 20, label, MONO, 11, color, active || hovered ? 1 : 0.75, 1)
+                if (active) { ctx.rectangle(tabX + 5, tabY + 7, 3, 16); ctx.fill() }
+                const x = tabX
+                g.push({ kind: "tab", key: `tab:${id}`, hoverable: true, bx0: x, by0: tabY, bx1: x + width, by1: tabY + 30, on: () => { st.tab = id; if (id === "logs") fetchLogs(); ctrl.requestDraw() } })
+                tabX += width + 8
             })
-            const rt = `${st.temp ? st.temp + "°C" : "—"}    ${st.mhz ? (st.mhz / 1000).toFixed(2) + "GHz" : "—"}    ${kbToG(st.memU).toFixed(1)}/${kbToG(st.memT).toFixed(1)}G`
-            ctx.selectFontFace(TITLE, 0, 1); ctx.setFontSize(15)
-            txt(ctx, X + W - ctx.textExtents(rt).width - 46, hy + 18, rt, TITLE, 15, SYSY, 0.92, 1)
-            ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(9)
-            const lt = `UP ${st.uptime}   LOAD ${st.load}`
-            txt(ctx, X + W - ctx.textExtents(lt).width - 46, hy + 40, lt, MONO, 9, SYSDIM, 0.6)
-
-            const gTop = Y + 190, gH = H - 400
-            ladder(ctx, X + 70, gTop, 30, gH, st.aCpu, SYSY, ch(0xf2db), "CPU", `${st.cpu}`, "r")
-            ladder(ctx, X + W - 100, gTop, 30, gH, st.aMem, SYSC, ch(0xefc5), "MEM", `${Math.round(memF * 100)}`, "l")
-
-            const mx = X + 350, mw = W - 700
-            let cy3 = Y + 150
+            const mx = X + 60, mw = W - 120
+            let cy3 = Y + 140
 
             if (st.tab === "task") {
                 groupLabel(ctx, mx, cy3, "// CORE ARRAY")
@@ -1543,7 +1544,7 @@ fi`).then(() => timeout(200, fetchInitApps))
                 const pinned = st.sel ? (st.selProc || st.procs.find((p) => p.pid === st.sel)) : null
                 const rest = pinned ? st.procs.filter((p) => p.pid !== st.sel) : st.procs
                 drawProcList(ctx, g.push, mx, ly, mw, lh, rest, st.scroll, st.sel, pinned, select, (p) => { select(p); killSel() })
-                txt(ctx, X + 46, Y + H - 22, "SCROLL processes · CLICK to select · RIGHT-CLICK kills · ESC closes", MONO, 9, SYSDIM, 0.5)
+                txt(ctx, X + 46, Y + H - 22, "1–4 / LEFT–RIGHT tabs · UP–DOWN select · RIGHT-CLICK kills · ESC closes", MONO, 9, SYSDIM, 0.5)
             } else if (st.tab === "system") {
             groupLabel(ctx, mx, cy3, "// SYS_INFO")
                   const sw4 = (mw - 28) / 3, gpuOk = st.sysInfo.gpuLoad >= 0
@@ -1594,10 +1595,14 @@ fi`).then(() => timeout(200, fetchInitApps))
               ctx.save(); ctx.rectangle(mx - 3, ly - 3, mw + 6, lh + 6); ctx.clip()
                 for (let i = 0; i <= vis; i++) {
                   const idx = st.initScroll + i; if (idx >= st.initApps.length) break
-                    initRow(ctx, g.push, mx, ly + i * step, mw, st.initApps[idx], toggleAutostart)
+                    if (idx === st.initFocus) {
+                      ctx.setSourceRGBA(SYSY[0], SYSY[1], SYSY[2], 0.9)
+                      ctx.rectangle(mx + 2, ly + i * step + 6, 3, 28); ctx.fill()
+                  }
+                  initRow(ctx, g.push, mx, ly + i * step, mw, st.initApps[idx], toggleAutostart)
                 }
                 ctx.restore()
-                txt(ctx, X + 46, Y + H - 22, "SCROLL apps · CLICK button to toggle · ESC closes", MONO, 9, SYSDIM, 0.5)
+                txt(ctx, X + 46, Y + H - 22, "1–4 / LEFT–RIGHT tabs · UP–DOWN select · ENTER toggles · ESC closes", MONO, 9, SYSDIM, 0.5)
           } else if (st.tab === "logs") {
               groupLabel(ctx, mx, cy3, "// INFO_LOGS")
             const fx0 = mx, fy0 = cy3 + 20, fw0 = mw
@@ -1612,7 +1617,7 @@ fi`).then(() => timeout(200, fetchInitApps))
                   txt(ctx, fx0 + 16, fy0 + 22 + i * lh2, line.slice(0, 180), MONO, 8.5, lcol, 0.85, 0)
             })
               ctx.restore()
-            txt(ctx, X + 46, Y + H - 22, "journalctl -n 200 · auto-refresh · ESC closes", MONO, 9, SYSDIM, 0.5)
+            txt(ctx, X + 46, Y + H - 22, "1–4 / LEFT–RIGHT tabs · journalctl -n 200 · ESC closes", MONO, 9, SYSDIM, 0.5)
             }
         },
     })
