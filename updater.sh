@@ -33,19 +33,38 @@ EOF
 
 norm() { printf '%s' "${1#[vV]}" | tr -d '[:space:]'; }
 
+# Greek major versions map to 1–24, so beta.46 equals 2.46. The
+# remaining components are numeric, exactly as for existing version tags.
+version_key() {
+    local version major tail i
+    local -a names=(alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega)
+    local -a letters=(α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ φ χ ψ ω)
+    version="$(norm "${1:-}")"
+    [[ "$version" =~ ^([^.]+)(\.[0-9]+){0,3}$ ]] || return 1
+    major="${version%%.*}"
+    tail="${version#"$major"}"
+    if [[ ! "$major" =~ ^[0-9]+$ ]]; then
+        for i in "${!names[@]}"; do
+            if [[ "$major" = "${names[$i]}" || "$major" = "${letters[$i]}" ]]; then
+                major=$((i + 1))
+                break
+            fi
+        done
+        [[ "$major" =~ ^[0-9]+$ ]] || return 1
+    fi
+    printf '%s%s\n' "$major" "$tail"
+}
+
 vlt() {
-    awk -v a="$(norm "${1:-0}")" -v b="$(norm "${2:-0}")" '
-        function seg(s, i,   n, p, v) {
-            n = split(s, p, ".")
-            v = (i <= n) ? p[i] : "0"
-            gsub(/[^0-9]/, "", v)
-            return (v == "") ? 0 : v + 0
-        }
+    local a b
+    a="$(version_key "${1:-}")" || return 2
+    b="$(version_key "${2:-}")" || return 2
+    awk -v a="$a" -v b="$b" '
         BEGIN {
+            split(a, x, "."); split(b, y, ".")
             for (i = 1; i <= 4; i++) {
-                x = seg(a, i); y = seg(b, i)
-                if (x < y) exit 0
-                if (x > y) exit 1
+                if (x[i] + 0 < y[i] + 0) exit 0
+                if (x[i] + 0 > y[i] + 0) exit 1
             }
             exit 1
         }'
@@ -141,7 +160,8 @@ cmd_apply() (
     }
     fetch_release || { err "Release lookup failed; no branch fallback was applied."; exit 1; }
     tag="$(remote_tag)"
-    [[ "$tag" =~ ^[a-zA-Z0-9][a-zA-Z0-9._-]*$ ]] || { err "Invalid release tag"; exit 1; }
+    git check-ref-format "refs/tags/$tag" && version_key "$tag" >/dev/null || { err "Invalid release version: $tag"; exit 1; }
+    version_key "$(local_ver)" >/dev/null || { err "Invalid installed version"; exit 1; }
     rv="$(norm "$tag")"
     vlt "$(local_ver)" "$rv" || { ok "Already up to date"; exit 0; }
     OLD="$(git rev-parse HEAD)"

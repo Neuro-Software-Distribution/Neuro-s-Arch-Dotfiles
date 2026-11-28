@@ -155,6 +155,22 @@ tag; it does not download release assets, so no packaged archive is required.
 A repository with only branches, tags, drafts, or prereleases has no latest stable
 release for this updater.
 
+
+> Well I lowkey overengineered the version notation and now it uses greek letters and they're acceptable by the 
+`updater.sh`
+
+**Details for the nerds** : 
+Versions may use a numeric major version or a Greek major version written as a
+lowercase letter or its English name, followed by up to three numeric components
+The 24 letters map in alphabetic order: `α`/`alpha` = 1, `β`/`beta` = 2,
+through `ω`/`omega` = 24. Thus `β.46` equals `2.46`, and `β.47` is newer.
+The optional `v` prefix works for both forms. Releases must advance the version:
+renaming `v2.46` to `vβ.46` alone does not produce an update.
+
+Existing installations running an older updater need a newer **numeric-tagged**
+bridging release containing Greek-version support before Greek-tagged releases can
+be offered to them. The previously published `v2.46` does not have that support.
+
 If the HUD fails, open a terminal with the compositor keybind or switch to a TTY
 and inspect `~/.local/state/cyberarch/shell.log`. Run
 `~/.config/hypr/themes/cyberpunk/scripts/restart` from the graphical session after

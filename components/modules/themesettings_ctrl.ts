@@ -1,16 +1,16 @@
 import { SCREEN_WIDTH, SCREEN_HEIGHT } from "../../env.ts"
-import { Cairo, TITLE, txt } from "./glass.ts"
+import { TITLE, MONO, txt } from "./glass.ts"
 import { createModal } from "./cmodal.ts"
 import { USER } from "./colors.ts"
 import Gdk from "gi://Gdk?version=3.0"
 import {
-    readTune, TABS,
+    readTune, TABS, setThemeSettingsController,
     drawColors, drawKeybinds, drawConfig, drawWm, drawWallRing, drawWallBrowse, drawWallPicker,
-    wallOpen, wallPickerOpen, wallPickerScroll, setWallPickerScroll, wallPickerKey,
+    wallOpen, scrollWall, wallPickerOpen, wallPickerScroll, setWallPickerScroll, wallPickerKey,
     kbScroll, kbMaxScroll, setKbScroll,
     hexEditing, colorsKeyRaw, colorsHexCancel
 } from "./themesettings.ts"
-import { startModalStats, stopModalStats } from "./sys.ts"
+import { stopModalStats } from "./sys.ts"
 
 const SW = SCREEN_WIDTH, SH = SCREEN_HEIGHT
 const tabBase = (): [number, number, number] => USER.sysveil as any
@@ -41,6 +41,11 @@ export const ThemeSettingsCtrl = () => {
         onScroll: (d) => {
             if (st.tab === "wall" && wallPickerOpen) {
                 setWallPickerScroll(wallPickerScroll + d * 36)
+                ctrl.requestDraw()
+                return
+            }
+            if (st.tab === "wall" && wallOpen) {
+                scrollWall(d * 36)
                 ctrl.requestDraw()
                 return
             }
@@ -75,92 +80,69 @@ export const ThemeSettingsCtrl = () => {
         },
         draw: (ctx, g) => {
             const X = g.X, Y = g.Y, W = g.w, H = g.h
-            const FW = SW, FH = SH
-
-            ctx.setSourceRGBA(0.015, 0.02, 0.03, 0.42)
-            ctx.rectangle(0, 0, FW, FH)
-            ctx.fill()
-
-            const pulse = 0.94 + 0.06 * Math.sin(Date.now() / 500)
-            const vcx = FW / 2, vcy = FH / 2, reach = Math.hypot(FW, FH) / 2
-            const vg = new Cairo.RadialGradient(vcx, vcy, reach * 0.16, vcx, vcy, reach * 0.98)
-            const [ov0, ov1, ov2] = USER.sysveil || USER.overlay
-            vg.addColorStopRGBA(0, ov0 * 0.08, ov1 * 0.08, ov2 * 0.08, 0.46)
-            vg.addColorStopRGBA(0.5, ov0 * 0.2, ov1 * 0.2, ov2 * 0.2, 0.68)
-            vg.addColorStopRGBA(1, ov0 * 0.62, ov1 * 0.62, ov2 * 0.62, 0.92 * pulse)
-            ctx.setSource(vg)
-            ctx.rectangle(0, 0, FW, FH)
-            ctx.fill()
-
-            const hy = Y + 40
             const base = tabBase(), acc = tabAcc()
-            ctx.setSourceRGBA(base[0], base[1], base[2], 0.3)
-            ctx.setLineWidth(1)
+            const panelX = X + Math.max(22, (W - 1280) / 2)
+            const panelW = W - (panelX - X) * 2
+            const panelY = Y + 28, panelH = H - 56
+            const cut = 20
+            const line = (color, alpha, width, x1, y1, x2, y2) => {
+                ctx.setSourceRGBA(color[0], color[1], color[2], alpha)
+                ctx.setLineWidth(width); ctx.newPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke()
+            }
+
+            ctx.setSourceRGBA(0.008, 0.01, 0.018, 0.78)
+            ctx.rectangle(0, 0, SW, SH); ctx.fill()
             ctx.newPath()
-            ctx.moveTo(X + 40, hy + 26)
-            ctx.lineTo(X + W - 40, hy + 26)
-            ctx.stroke()
+            ctx.moveTo(panelX + cut, panelY); ctx.lineTo(panelX + panelW, panelY)
+            ctx.lineTo(panelX + panelW, panelY + panelH - cut)
+            ctx.lineTo(panelX + panelW - cut, panelY + panelH)
+            ctx.lineTo(panelX, panelY + panelH); ctx.lineTo(panelX, panelY + cut)
+            ctx.closePath()
+            ctx.setSourceRGBA(0.025, 0.03, 0.045, 0.97); ctx.fillPreserve()
+            ctx.setSourceRGBA(base[0], base[1], base[2], 0.72); ctx.setLineWidth(1); ctx.stroke()
+            line(acc, 0.9, 2, panelX + cut, panelY, panelX + 160, panelY)
 
-            const tabs = TABS
-            ctx.selectFontFace(TITLE, 0, 1)
-            ctx.setFontSize(13)
-            let tw2 = tabs.reduce((a2, [t]) => a2 + ctx.textExtents(t).width + 30, 0)
-            let tx3 = X + W / 2 - tw2 / 2
+            const left = panelX + 32, right = panelX + panelW - 32
+            txt(ctx, left, panelY + 33, "NEUROS  /  SETTINGS", TITLE, 17, acc, 1)
+            txt(ctx, left, panelY + 54, "DESKTOP CONFIGURATION", MONO, 10, base, 0.8)
+            const hint = "←  →  SECTIONS     ESC  CLOSE"
+            ctx.selectFontFace(MONO, 0, 0); ctx.setFontSize(10)
+            txt(ctx, right - ctx.textExtents(hint).width, panelY + 39, hint, MONO, 10, base, 0.8)
+            line(base, 0.32, 1, left, panelY + 70, right, panelY + 70)
 
-            tabs.forEach(([t, id]) => {
-                const w2 = ctx.textExtents(t).width
+            const navY = panelY + 82
+            const navW = (panelW - 64) / TABS.length
+            TABS.forEach(([label, id], i) => {
+                const nx = left + i * navW
                 const active = st.tab === id
-                const hv = g.push.hoverKey === `tab:${id}`
-                const tcol: any = active ? acc : (hv ? acc : base)
-
-                txt(ctx, tx3, hy + 16, t, TITLE, 13, tcol, active ? 0.98 : (hv ? 0.9 : 0.6), 1)
-
-                if (active || hv) {
-                    ctx.setSourceRGBA(acc[0], acc[1], acc[2], active ? 0.95 : 0.55)
-                    ctx.rectangle(tx3, hy + 23, w2, 2)
-                    ctx.fill()
+                const hover = g.push.hoverKey === `tab:${id}`
+                if (active || hover) {
+                    ctx.setSourceRGBA(acc[0], acc[1], acc[2], active ? 0.14 : 0.07)
+                    ctx.rectangle(nx, navY, navW - 6, 42); ctx.fill()
+                    line(acc, active ? 1 : 0.5, active ? 2 : 1, nx, navY + 41, nx + navW - 6, navY + 41)
                 }
-
-                g.push({
-                    kind: "tab",
-                    key: `tab:${id}`,
-                    hoverable: true,
-                    bx0: tx3 - 10,
-                    by0: hy,
-                    bx1: tx3 + w2 + 10,
-                    by1: hy + 28,
-                    on: () => {
-                        st.tab = id
-                        setKbScroll(0)
-                        ctrl.requestDraw()
-                    }
-                })
-
-                tx3 += w2 + 30
+                txt(ctx, nx + 9, navY + 16, `0${i + 1}`, MONO, 9, active ? acc : base, 0.7)
+                txt(ctx, nx + 9, navY + 33, label, TITLE, 11, active || hover ? acc : base, active ? 1 : 0.75)
+                g.push({ kind: "tab", key: `tab:${id}`, hoverable: true,
+                    bx0: nx, by0: navY, bx1: nx + navW - 6, by1: navY + 42,
+                    on: () => { st.tab = id; setKbScroll(0); ctrl.requestDraw() } })
             })
 
-            const mx = X + 350, mw = W - 700
-            const cy3 = Y + 150
-
-            if (st.tab === "colors") {
-                drawColors(ctx, g, mx, cy3, mw)
-            } else if (st.tab === "keybinds") {
-                drawKeybinds(ctx, g, mx, cy3, mw)
-            } else if (st.tab === "anim") {
-                drawConfig(ctx, g, mx, cy3, mw)
-            } else if (st.tab === "wm") {
-                drawWm(ctx, g, mx, cy3, mw)
-            } else if (st.tab === "wall") {
-                if (wallPickerOpen) {
-                    drawWallPicker(ctx, g, mx, cy3, mw)
-                } else if (wallOpen) {
-                    drawWallBrowse(ctx, g, mx, cy3, mw)
-                } else {
-                    drawWallRing(ctx, g, mx, cy3, mw)
-                }
+            // Existing content renderers derive their scroll viewport from g's bounds.
+            const mx = left + 18, mw = panelW - 100, cy = navY + 62
+            const content = { ...g, Y: panelY, h: panelH - 14 }
+            if (st.tab === "colors") drawColors(ctx, content, mx, cy, mw)
+            else if (st.tab === "keybinds") drawKeybinds(ctx, content, mx, cy, mw)
+            else if (st.tab === "anim") drawConfig(ctx, content, mx, cy, mw)
+            else if (st.tab === "wm") drawWm(ctx, content, mx, cy, mw)
+            else if (st.tab === "wall") {
+                if (wallPickerOpen) drawWallPicker(ctx, content, mx, cy, mw)
+                else if (wallOpen) drawWallBrowse(ctx, content, mx, cy, mw)
+                else drawWallRing(ctx, content, mx, cy, mw)
             }
         },
     })
 
+    setThemeSettingsController(ctrl)
     return ctrl
 }

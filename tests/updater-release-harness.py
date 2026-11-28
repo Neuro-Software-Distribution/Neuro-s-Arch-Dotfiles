@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Exercise release lookup without network access or modifying a real checkout."""
+import json
 import os
 from pathlib import Path
 import shutil
@@ -67,6 +68,34 @@ exit "${TEST_CURL_EXIT:-0}"
         result = self.run_update('200', '{"tag_name":"v2.45","body":"Notes"}')
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn('Already up to date', result.stdout)
+
+    def test_greek_alphabet_maps_to_numeric_major_versions(self):
+        names = 'alpha beta gamma delta epsilon zeta eta theta iota kappa lambda mu nu xi omicron pi rho sigma tau upsilon phi chi psi omega'.split()
+        letters = 'α β γ δ ε ζ η θ ι κ λ μ ν ξ ο π ρ σ τ υ φ χ ψ ω'.split()
+        for number, (name, letter) in enumerate(zip(names, letters), 1):
+            for spelling in (name, letter):
+                with self.subTest(version=spelling):
+                    (self.repo / 'VERSION').write_text(f'{number}.3\n')
+                    body = json.dumps({'tag_name': f'{spelling}.3'})
+                    self.assertEqual(self.run_update('200', body, 'check').stdout.splitlines()[0], '0')
+                    body = json.dumps({'tag_name': f'{spelling}.4'})
+                    self.assertEqual(self.run_update('200', body, 'check').stdout.splitlines()[0], '1')
+
+    def test_beta_migrates_from_numeric_and_accepts_unicode_tag(self):
+        newer = json.dumps({'tag_name': 'β.46', 'body': 'Greek release'})
+        result = self.run_update('200', newer, 'check')
+        self.assertEqual(result.stdout.splitlines()[:3], ['1', '2.45', 'β.46'])
+        same = json.dumps({'tag_name': 'β.45'})
+        result = self.run_update('200', same)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('Already up to date', result.stdout)
+
+    def test_invalid_version_is_rejected(self):
+        for tag in ('banana.9', 'β.-1', '2.1.2.3.4'):
+            with self.subTest(tag=tag):
+                result = self.run_update('200', json.dumps({'tag_name': tag}))
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('Invalid release version', result.stdout)
 
     def test_background_check_preserves_machine_readable_output(self):
         result = self.run_update('404', '{}', 'check')

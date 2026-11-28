@@ -59,6 +59,7 @@ export const TABS: [string, string][] = [
 const TAB_BADGE: Record<string, string> = { colors: "PAL", wm: "TUNE", anim: "CFG" }
 let tab = "anim"
 let ctrl: any = null
+export const setThemeSettingsController = (controller: any) => { ctrl = controller }
 
 const wheelEntries = () =>
     TABS.map(([label, id]) => ({ label, badge: TAB_BADGE[id] ?? "", glyph: null, data: id }))
@@ -1314,6 +1315,7 @@ let wallFiles: { name: string; path: string; ext: string }[] = []
 let wallFilesLoading = false
 export let wallScroll = 0
 let wallMaxScroll = 0
+export const scrollWall = (delta: number) => { wallScroll = Math.max(0, Math.min(wallMaxScroll, wallScroll + delta)) }
 let wallUploading = false
 
 export let wallPickerOpen = false
@@ -1655,7 +1657,7 @@ onColorChange(() => { for (const k of Object.keys(wheelTintCache)) delete wheelT
 export const drawWallRing = (ctx, g, x, y, w) => {
     const surf = wheelSurf()
     const topY = y + 4
-    const botLimit = Math.min(y + g.h - 12, SCREEN_HEIGHT - 20) - 26
+    const botLimit = Math.min(g.Y + g.h - 12, SCREEN_HEIGHT - 20) - 26
     const side = Math.max(120, Math.min(w, botLimit - topY))
     const ox = x + (w - side) / 2
     const oy = topY + (botLimit - topY - side) / 2
